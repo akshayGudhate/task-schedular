@@ -107,6 +107,33 @@ Poll `GET /status/{execution_id}` until `status` is `COMPLETED` or `FAILED`.
 
 ---
 
+## Task Lifecycle
+
+```
+POST /tasks
+    │
+    ▼
+CREATED ──────────────────────────────────────────► CANCELLED
+    │  (scheduled via APScheduler DateTrigger)
+    ▼
+RUNNING
+    │
+    ├── 2xx (sync)  ──────────────────────────────► SUCCESS
+    │
+    ├── 202 (async) → poll check_url every POLL_INTERVAL_SECONDS
+    │       ├── COMPLETED ────────────────────────► SUCCESS
+    │       └── FAILED    ──► RETRYING (if retries remain) or FAILED
+    │
+    └── non-2xx / timeout
+            ├── retries remain → RETRYING ──► RUNNING (exponential backoff: 60s, 120s, 240s…)
+            └── retries exhausted ────────────────► FAILED
+```
+
+Every attempt (including retries) is recorded with `http_status`, `duration_ms`, and `response_body`.
+Retrieve them via `GET /tasks/{task_id}` (the `attempts` array).
+
+---
+
 ## Commands
 
 ### Local Dev
@@ -256,8 +283,12 @@ fortinet/
 │       │   ├── request_id.py     # injects X-Request-ID, binds to structlog context
 │       │   ├── security.py       # secure HTTP response headers
 │       │   └── setup.py          # registers all middleware on the app
-│       └── models/
-│           └── task.py           # enums (TaskStatus, RecurrenceType, AttemptStatus) + request/response models
+│       ├── models/
+│       │   └── task.py           # enums (TaskStatus, RecurrenceType, AttemptStatus) + request/response models
+│       └── services/
+│           ├── scheduler_service.py  # APScheduler singleton — schedule_task / cancel_job / reload on startup
+│           ├── webhook_service.py    # fire_webhook(), poll_execution() — httpx dispatch, 202 polling, retry logic, attempt recording
+│           └── task_service.py       # all DB ops: tasks CRUD + attempt lifecycle
 └── executor/
     ├── Dockerfile
     ├── Dockerfile.migrate

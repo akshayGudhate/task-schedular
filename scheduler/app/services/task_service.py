@@ -120,3 +120,87 @@ async def cancel_task(task_id: UUID) -> TaskResponse:
             task_id,
         )
     return _to_task_response(updated)
+
+
+async def get_task(task_id: UUID) -> Optional[TaskResponse]:
+    async with get_connection() as conn:
+        row = await conn.fetchrow("SELECT * FROM tasks WHERE id = $1", task_id)
+    return _to_task_response(row) if row else None
+
+
+async def _transition(task_id: UUID, next_status: TaskStatus) -> None:
+    async with get_connection() as conn:
+        row = await conn.fetchrow("SELECT status FROM tasks WHERE id = $1", task_id)
+        if not row:
+            raise NotFoundError(f"task {task_id} not found")
+        guard(TaskStatus(row["status"]), next_status)
+        await conn.execute(
+            "UPDATE tasks SET status = $2, updated_at = NOW() WHERE id = $1",
+            task_id, next_status.value,
+        )
+
+
+async def mark_running(task_id: UUID) -> None:
+    await _transition(task_id, TaskStatus.RUNNING)
+
+
+async def mark_success(task_id: UUID) -> None:
+    await _transition(task_id, TaskStatus.SUCCESS)
+
+
+async def mark_failed(task_id: UUID) -> None:
+    await _transition(task_id, TaskStatus.FAILED)
+
+
+async def mark_retrying(task_id: UUID) -> None:
+    await _transition(task_id, TaskStatus.RETRYING)
+
+
+async def increment_retry_count(task_id: UUID) -> int:
+    # atomic — returns the new count so the caller can compute the next delay
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            "UPDATE tasks SET retry_count = retry_count + 1, updated_at = NOW() WHERE id = $1 RETURNING retry_count",
+            task_id,
+        )
+    return row["retry_count"]
+
+
+async def create_attempt(task_id: UUID, attempt_number: int) -> UUID:
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            """
+            INSERT INTO task_attempts (task_id, attempt_number, started_at, status)
+            VALUES ($1, $2, NOW(), 'RUNNING')
+            RETURNING id
+            """,
+            task_id, attempt_number,
+        )
+    return row["id"]
+
+
+async def complete_attempt(
+    attempt_id: UUID, http_status: int, response_body: str, duration_ms: int,
+) -> None:
+    async with get_connection() as conn:
+        await conn.execute(
+            """
+            UPDATE task_attempts
+            SET status = 'SUCCESS', http_status = $2, response_body = $3,
+                duration_ms = $4, completed_at = NOW()
+            WHERE id = $1
+            """,
+            attempt_id, http_status, response_body, duration_ms,
+        )
+
+
+async def fail_attempt(attempt_id: UUID, error_message: str, duration_ms: int) -> None:
+    async with get_connection() as conn:
+        await conn.execute(
+            """
+            UPDATE task_attempts
+            SET status = 'FAILED', error_message = $2, duration_ms = $3, completed_at = NOW()
+            WHERE id = $1
+            """,
+            attempt_id, error_message, duration_ms,
+        )

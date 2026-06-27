@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Query, status
 
 from app.models.task import TaskCreate, TaskDetailResponse, TaskResponse, TaskStatus
+from app.services import scheduler_service
 import app.services.task_service as svc
 
 router = APIRouter()
@@ -27,11 +28,23 @@ Schedule a new task for webhook execution.
 - `webhook_url` must start with `http://` or `https://`
 - `recurrence: CUSTOM_CRON` requires a valid `cron_expression`
 - `max_retries` defaults to 3; set to 0 to disable retries
+
+**What happens at execution time**
+
+The scheduler POSTs `{task_id, attempt_id, payload}` to `webhook_url`.
+
+- **2xx (not 202)** → task moves to `SUCCESS`
+- **202** → scheduler polls the `check_url` from the response body every `POLL_INTERVAL_SECONDS`
+  until the executor reports `COMPLETED` (→ `SUCCESS`) or `FAILED`
+- **non-2xx / timeout** → retries with exponential backoff: 60 s → 120 s → 240 s…
+  up to `max_retries`; exhausted retries move the task to `FAILED`
 """,
     responses=_422,
 )
 async def create_task(body: TaskCreate) -> TaskResponse:
-    return await svc.create_task(body)
+    task = await svc.create_task(body)
+    scheduler_service.schedule_task(UUID(task.id), task.execution_time)
+    return task
 
 
 @router.get(
@@ -63,8 +76,10 @@ async def get_task(task_id: UUID) -> TaskDetailResponse:
     "/{task_id}/cancel",
     response_model=TaskResponse,
     summary="Cancel a task",
-    description="Moves the task to `CANCELLED`. Only allowed from `CREATED` or `PENDING` — returns 409 if the task is already running, done, or failed.",
+    description="Moves the task to `CANCELLED`. Only allowed from `CREATED` or `PENDING` — once `RUNNING` or `RETRYING` the task cannot be stopped mid-flight. Returns 409 for any other state.",
     responses={**_404, **_409},
 )
 async def cancel_task(task_id: UUID) -> TaskResponse:
-    return await svc.cancel_task(task_id)
+    task = await svc.cancel_task(task_id)
+    scheduler_service.cancel_job(task_id)
+    return task

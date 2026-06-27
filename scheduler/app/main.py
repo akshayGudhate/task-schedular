@@ -9,6 +9,7 @@ from app.core.errors import register_error_handlers
 from app.core.logging import setup_logging
 from app.db.database import create_pool, close_pool
 from app.middleware.setup import register_middleware
+from app.services import scheduler_service
 
 settings = get_settings()
 
@@ -29,22 +30,28 @@ _tags = [
 ]
 
 _description = """
-Manages the full task lifecycle — accepts tasks via API, fires webhooks at their
-scheduled time, handles retries with exponential backoff, and tracks every attempt.
+Accepts tasks via REST API, fires outbound webhooks at their scheduled time via
+APScheduler, and records every attempt with HTTP status and duration.
 
-**Key responsibilities**
-- Schedule one-shot and recurring tasks (hourly / daily / custom cron)
-- Fire outbound webhooks and poll async (202) responses
-- Enforce state machine transitions: `CREATED → PENDING → RUNNING → SUCCESS / FAILED`
-- Retry failed tasks with configurable backoff up to `max_retries`
+**Task lifecycle**
+- `POST /tasks` — persists the task and schedules it immediately via `DateTrigger`
+- At `execution_time` — scheduler calls the `webhook_url` and records the attempt
+- Status flow: `CREATED → RUNNING → SUCCESS / FAILED`
+- Non-2xx or timeout → exponential-backoff retry (`RETRYING`) up to `max_retries`
+  - Delays double each attempt: 60 s → 120 s → 240 s…
+- 202 response → polls `check_url` every `POLL_INTERVAL_SECONDS` until `COMPLETED` or `FAILED`
+- `PATCH /tasks/{id}/cancel` — removes the pending job and marks the task `CANCELLED`
+- Jobs survive restarts — `CREATED`, `PENDING`, and `RETRYING` tasks reload on startup
 """
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await create_pool()
+    await scheduler_service.start()
     log.info("scheduler.starting", version=settings.APP_VERSION)
     yield
+    await scheduler_service.stop()
     await close_pool()
     log.info("scheduler.stopped")
 
