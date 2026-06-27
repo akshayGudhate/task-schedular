@@ -1,0 +1,83 @@
+services:
+
+  # ─── Databases ─── #
+
+  scheduler-db:
+    image: postgres:16-alpine
+    container_name: scheduler-db
+    environment:
+      POSTGRES_USER: ${SCHEDULER_DB_USER}
+      POSTGRES_PASSWORD: ${SCHEDULER_DB_PASSWORD}
+      POSTGRES_DB: ${SCHEDULER_DB_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - scheduler_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SCHEDULER_DB_USER} -d ${SCHEDULER_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - fortinet
+
+  executor-db:
+    image: postgres:16-alpine
+    container_name: executor-db
+    environment:
+      POSTGRES_USER: ${EXECUTOR_DB_USER}
+      POSTGRES_PASSWORD: ${EXECUTOR_DB_PASSWORD}
+      POSTGRES_DB: ${EXECUTOR_DB_NAME}
+    ports:
+      - "5433:5432"
+    volumes:
+      - executor_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${EXECUTOR_DB_USER} -d ${EXECUTOR_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - fortinet
+
+  # ─── Services ─── #
+
+  scheduler:
+    build:
+      context: ./scheduler
+      dockerfile: Dockerfile
+    container_name: scheduler
+    env_file: .env
+    ports:
+      - "${SCHEDULER_PORT}:${SCHEDULER_PORT}"
+    depends_on:
+      scheduler-db:
+        condition: service_healthy
+    networks:
+      - fortinet
+    restart: unless-stopped
+
+  executor:
+    build:
+      context: ./executor
+      dockerfile: Dockerfile
+    container_name: executor
+    env_file: .env
+    ports:
+      - "${EXECUTOR_PORT}:${EXECUTOR_PORT}"
+    depends_on:
+      executor-db:
+        condition: service_healthy
+    networks:
+      - fortinet
+    restart: unless-stopped
+
+# ─── Volumes & Networks ─── #
+
+volumes:
+  scheduler_db_data:
+  executor_db_data:
+
+networks:
+  fortinet:
+    driver: bridge
