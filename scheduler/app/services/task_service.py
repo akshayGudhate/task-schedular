@@ -5,8 +5,9 @@ from typing import Optional
 from uuid import UUID
 
 import asyncpg
+import structlog
 
-from app.core.errors import NotFoundError
+from app.core.errors import InvalidTransitionError, NotFoundError
 from app.db.database import get_connection
 from app.models.task import (
     AttemptStatus,
@@ -16,7 +17,9 @@ from app.models.task import (
     TaskResponse,
     TaskStatus,
 )
-from app.state_machine import guard
+from app.state_machine import ALLOWED_TRANSITIONS
+
+log = structlog.get_logger()
 
 
 def _to_task_response(row: asyncpg.Record) -> TaskResponse:
@@ -128,16 +131,50 @@ async def get_task(task_id: UUID) -> Optional[TaskResponse]:
     return _to_task_response(row) if row else None
 
 
-async def _transition(task_id: UUID, next_status: TaskStatus) -> None:
+async def recover_running_tasks() -> int:
     async with get_connection() as conn:
-        row = await conn.fetchrow("SELECT status FROM tasks WHERE id = $1", task_id)
-        if not row:
-            raise NotFoundError(f"task {task_id} not found")
-        guard(TaskStatus(row["status"]), next_status)
+        # close attempt records left open by the previous process
         await conn.execute(
-            "UPDATE tasks SET status = $2, updated_at = NOW() WHERE id = $1",
-            task_id, next_status.value,
+            """
+            UPDATE task_attempts
+            SET status = 'FAILED'::attempt_status, error_message = 'interrupted by service restart',
+                completed_at = NOW(), duration_ms = 0
+            WHERE status = 'RUNNING'::attempt_status
+            """
         )
+        rows = await conn.fetch(
+            """
+            UPDATE tasks SET
+                retry_count = CASE WHEN retry_count < max_retries THEN retry_count + 1 ELSE retry_count END,
+                status      = CASE WHEN retry_count < max_retries THEN 'RETRYING'::task_status ELSE 'FAILED'::task_status END,
+                updated_at  = NOW()
+            WHERE status = 'RUNNING'
+            RETURNING id, status
+            """
+        )
+    for row in rows:
+        log.warning("task.recovered", task_id=str(row["id"]), new_status=row["status"])
+    return len(rows)
+
+
+async def _transition(task_id: UUID, next_status: TaskStatus) -> None:
+    # compute valid predecessors from the state machine — UPDATE checks them atomically, no separate SELECT needed
+    valid_from = [s.value for s, allowed in ALLOWED_TRANSITIONS.items() if next_status in allowed]
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            "UPDATE tasks SET status = $2, updated_at = NOW() WHERE id = $1 AND status = ANY($3::text[]) RETURNING id",
+            task_id, next_status.value, valid_from,
+        )
+        if row:
+            return
+        # error path only — distinguish not-found from invalid transition
+        current = await conn.fetchrow("SELECT status FROM tasks WHERE id = $1", task_id)
+    if not current:
+        raise NotFoundError(f"task {task_id} not found")
+    raise InvalidTransitionError(
+        f"task cannot move from {current['status']} → {next_status.value} "
+        f"(valid predecessors: {valid_from or 'none — terminal state'})"
+    )
 
 
 async def mark_running(task_id: UUID) -> None:

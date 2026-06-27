@@ -42,11 +42,15 @@ async def create_execution(
             """
             INSERT INTO executions (task_id, attempt_id, webhook_url, payload)
             VALUES ($1, $2, $3, $4::jsonb)
+            ON CONFLICT (attempt_id) DO NOTHING
             RETURNING id
             """,
             task_id, attempt_id, webhook_url, json.dumps(payload),
         )
-    return row["id"]
+        if row:
+            return row["id"]
+        # duplicate attempt_id from a scheduler retry — return the existing execution id
+        return await conn.fetchval("SELECT id FROM executions WHERE attempt_id = $1", attempt_id)
 
 
 async def mark_processing(execution_id: UUID) -> None:

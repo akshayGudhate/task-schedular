@@ -286,8 +286,7 @@ fortinet/
 │       ├── models/
 │       │   └── task.py           # enums (TaskStatus, RecurrenceType, AttemptStatus) + request/response models
 │       └── services/
-│           ├── scheduler_service.py  # APScheduler singleton — schedule_task / cancel_job / reload on startup
-│           ├── webhook_service.py    # fire_webhook(), poll_execution() — httpx dispatch, 202 polling, retry logic, attempt recording
+│           ├── job_runner.py         # merged: APScheduler singleton + shared httpx client + fire/poll/retry logic
 │           └── task_service.py       # all DB ops: tasks CRUD + attempt lifecycle
 └── executor/
     ├── Dockerfile
@@ -316,7 +315,7 @@ fortinet/
         ├── models/
         │   └── execution.py      # ExecutionStatus enum + request/response models
         └── services/
-            └── execution_service.py
+            └── execution_service.py  # create/update execution records, sync + async execution paths
 ```
 
 ---
@@ -331,6 +330,8 @@ fortinet/
 | Database | PostgreSQL 16 |
 | DB Driver | asyncpg 0.29 |
 | Migrations | Goose (pressly/goose) |
+| Scheduler | APScheduler 3.10 |
+| HTTP Client | httpx 0.27 |
 | Logging | structlog 24.4 |
 | Security | secure 0.3 |
 | Containers | Docker + docker compose v2 |

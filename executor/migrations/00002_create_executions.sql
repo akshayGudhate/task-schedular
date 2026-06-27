@@ -16,12 +16,13 @@ CREATE TABLE executions (
     updated_at      TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
 
     -- constraints
-    CONSTRAINT chk_completed_after_started CHECK (completed_at IS NULL OR completed_at >= started_at)
+    CONSTRAINT chk_completed_after_started CHECK (completed_at IS NULL OR completed_at >= started_at),
+    CONSTRAINT uq_executions_attempt_id    UNIQUE (attempt_id)
 );
 
 -- indexes
-CREATE INDEX idx_executions_task_id    ON executions (task_id);
-CREATE INDEX idx_executions_attempt_id ON executions (attempt_id);
+CREATE INDEX idx_executions_task_id ON executions (task_id);
+-- attempt_id index is created automatically by the uq_executions_attempt_id constraint
 
 -- index
 CREATE INDEX idx_executions_status_started_at ON executions (status, started_at);

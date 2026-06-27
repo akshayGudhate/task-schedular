@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Query, status
 
 from app.models.task import TaskCreate, TaskDetailResponse, TaskResponse, TaskStatus
-from app.services import scheduler_service
+from app.services import job_runner
 import app.services.task_service as svc
 
 router = APIRouter()
@@ -43,7 +43,7 @@ The scheduler POSTs `{task_id, attempt_id, payload}` to `webhook_url`.
 )
 async def create_task(body: TaskCreate) -> TaskResponse:
     task = await svc.create_task(body)
-    scheduler_service.schedule_task(UUID(task.id), task.execution_time)
+    job_runner.schedule_task(UUID(task.id), task.execution_time)
     return task
 
 
@@ -81,5 +81,5 @@ async def get_task(task_id: UUID) -> TaskDetailResponse:
 )
 async def cancel_task(task_id: UUID) -> TaskResponse:
     task = await svc.cancel_task(task_id)
-    scheduler_service.cancel_job(task_id)
+    job_runner.cancel_job(task_id)
     return task

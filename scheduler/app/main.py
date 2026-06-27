@@ -9,7 +9,7 @@ from app.core.errors import register_error_handlers
 from app.core.logging import setup_logging
 from app.db.database import create_pool, close_pool
 from app.middleware.setup import register_middleware
-from app.services import scheduler_service
+from app.services import job_runner
 
 settings = get_settings()
 
@@ -48,10 +48,10 @@ APScheduler, and records every attempt with HTTP status and duration.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await create_pool()
-    await scheduler_service.start()
+    await job_runner.start()
     log.info("scheduler.starting", version=settings.APP_VERSION)
     yield
-    await scheduler_service.stop()
+    await job_runner.stop()
     await close_pool()
     log.info("scheduler.stopped")
 
