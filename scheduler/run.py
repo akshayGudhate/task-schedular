@@ -15,9 +15,12 @@ if missing:
     print("\nCopy .env.example to .env and fill in the required values.\n")
     sys.exit(1)
 
+# get settings
 settings = get_settings()
 
+# entry point for the scheduler service
 if __name__ == "__main__":
+    # run the FastAPI app using uvicorn
     uvicorn.run(
         "app.main:app",
         host=settings.SCHEDULER_HOST,

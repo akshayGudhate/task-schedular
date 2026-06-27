@@ -139,21 +139,42 @@ docker exec -it executor-db  psql -U $EXECUTOR_DB_USER  -d $EXECUTOR_DB_NAME
 
 Copy `.env.example` to `.env`. Never commit `.env`.
 
+### Scheduler
+
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `SCHEDULER_DB_URL` | Yes | — | Full postgres connection string |
 | `SCHEDULER_DB_USER` | Yes | — | Postgres user |
 | `SCHEDULER_DB_PASSWORD` | Yes | — | Postgres password |
 | `SCHEDULER_DB_NAME` | Yes | — | Database name |
+| `EXECUTOR_BASE_URL` | Yes | — | Base URL of the executor service |
+| `SCHEDULER_HOST` | No | `0.0.0.0` | Bind host |
+| `SCHEDULER_PORT` | No | `8080` | Service port |
+| `DEBUG` | No | `false` | Pretty logs + debug level |
+| `CORS_ALLOW_ORIGINS` | No | `*` | Comma-separated allowed origins |
+| `DB_POOL_MIN_SIZE` | No | `2` | Min DB connections |
+| `DB_POOL_MAX_SIZE` | No | `10` | Max DB connections |
+| `RETRY_BASE_DELAY_SECONDS` | No | `60` | First retry delay — doubles each time |
+| `POLL_INTERVAL_SECONDS` | No | `5` | How often to poll async (202) webhooks |
+| `POLL_MAX_ATTEMPTS` | No | `60` | Max poll attempts before giving up |
+| `WEBHOOK_TIMEOUT_SECONDS` | No | `30` | HTTP timeout for outbound webhooks |
+| `MISFIRE_GRACE_TIME_SECONDS` | No | `300` | How late a scheduled job can still fire |
+
+### Executor
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
 | `EXECUTOR_DB_URL` | Yes | — | Full postgres connection string |
 | `EXECUTOR_DB_USER` | Yes | — | Postgres user |
 | `EXECUTOR_DB_PASSWORD` | Yes | — | Postgres password |
 | `EXECUTOR_DB_NAME` | Yes | — | Database name |
-| `SCHEDULER_HOST` | No | `0.0.0.0` | Bind host |
-| `SCHEDULER_PORT` | No | `8080` | Service port |
 | `EXECUTOR_HOST` | No | `0.0.0.0` | Bind host |
 | `EXECUTOR_PORT` | No | `8090` | Service port |
-| `APP_VERSION` | No | `1.0.0` | Version string |
+| `DEBUG` | No | `false` | Pretty logs + debug level |
+| `CORS_ALLOW_ORIGINS` | No | `*` | Comma-separated allowed origins |
+| `DB_POOL_MIN_SIZE` | No | `2` | Min DB connections |
+| `DB_POOL_MAX_SIZE` | No | `10` | Max DB connections |
+| `EXECUTION_TIMEOUT_SECONDS` | No | `300` | Max time to wait for a task to complete |
 
 ---
 
@@ -161,33 +182,53 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 
 ```
 fortinet/
-├── docker-compose.yml                # all 4 containers
-├── Makefile                          # all dev and docker commands
-├── .env.example                      # env template — copy to .env
-├── .cursorrules                      # Cursor IDE coding rules
-├── CLAUDE.md                         # Claude Code instructions
-├── Fortinet.postman_collection.json  # Postman collection
+├── docker-compose.yml
+├── Makefile
+├── .env.example
+├── CLAUDE.md
 ├── docs/
-│   ├── project-plan.md               # commit-by-commit build plan
-│   ├── project-graph.md              # module dependency map
-│   ├── rules.md                      # security and coding rules
-│   └── agents.md                     # Claude agent definitions
+│   ├── project-plan.md
+│   ├── project-graph.md
+│   ├── rules.md
+│   └── agents.md
 ├── scheduler/
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   ├── run.py                        # validates env + starts uvicorn
 │   └── app/
-│       ├── main.py                   # FastAPI app + /health
-│       └── core/
-│           └── config.py             # pydantic settings + env validation
+│       ├── main.py                   # app wiring — lifespan, middleware, router
+│       ├── state_machine.py          # task status transition guard
+│       ├── api/
+│       │   └── routes.py             # all HTTP routes
+│       ├── core/
+│       │   ├── config.py             # pydantic settings
+│       │   ├── errors.py             # exception hierarchy + handlers
+│       │   └── logging.py            # structlog setup
+│       ├── db/
+│       │   └── database.py           # asyncpg connection pool
+│       ├── middleware/
+│       │   ├── request_id.py         # X-Request-ID + structured logging per request
+│       │   ├── security.py           # secure response headers
+│       │   └── setup.py              # registers all middleware on the app
+│       └── models/
+│           ├── task.py               # Task + TaskStatus + RecurrenceType
+│           └── task_attempt.py       # TaskAttempt + AttemptStatus
 └── executor/
     ├── Dockerfile
     ├── requirements.txt
     ├── run.py
     └── app/
         ├── main.py
-        └── core/
-            └── config.py
+        ├── api/
+        │   └── routes.py
+        ├── core/
+        │   ├── config.py
+        │   ├── errors.py
+        │   └── logging.py
+        ├── middleware/
+        │   ├── request_id.py
+        │   ├── security.py
+        │   └── setup.py
 ```
 
 ---
@@ -200,7 +241,8 @@ fortinet/
 | Framework | FastAPI 0.115 |
 | Config | pydantic-settings 2.x |
 | Database | PostgreSQL 16 |
-| ORM | SQLAlchemy 2.0 async *(coming soon)* |
+| DB Driver | asyncpg 0.29 |
+| Logging | structlog 24.4 |
 | Scheduler | APScheduler 3.x *(coming soon)* |
-| Logging | structlog *(coming soon)* |
+| HTTP Client | httpx 0.27 *(coming soon)* |
 | Containers | Docker + docker compose v2 |
