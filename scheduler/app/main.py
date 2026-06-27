@@ -16,6 +16,24 @@ setup_logging(debug=settings.DEBUG)
 
 log = structlog.get_logger()
 
+_tags = [
+    {
+        "name": "health",
+        "description": "Liveness check — confirms the service is up and reachable.",
+    },
+]
+
+_description = """
+Manages the full task lifecycle — accepts tasks via API, fires webhooks at their
+scheduled time, handles retries with exponential backoff, and tracks every attempt.
+
+**Key responsibilities**
+- Schedule one-shot and recurring tasks (hourly / daily / custom cron)
+- Fire outbound webhooks and poll async (202) responses
+- Enforce state machine transitions: `CREATED → PENDING → RUNNING → SUCCESS / FAILED`
+- Retry failed tasks with configurable backoff up to `max_retries`
+"""
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -27,7 +45,14 @@ async def lifespan(app: FastAPI):
     log.info("scheduler.stopped")
 
 
-app = FastAPI(title=settings.APP_NAME, version=settings.APP_VERSION, lifespan=lifespan)
+app = FastAPI(
+    title=settings.APP_NAME,
+    version=settings.APP_VERSION,
+    description=_description,
+    contact={"name": "Akshay Gudhate", "email": "akshay.gudhate@gmail.com"},
+    openapi_tags=_tags,
+    lifespan=lifespan,
+)
 
 register_middleware(app)
 register_error_handlers(app)

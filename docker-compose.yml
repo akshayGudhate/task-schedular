@@ -40,6 +40,38 @@ services:
     networks:
       - fortinet
 
+  # ─── Migrations ─── #
+
+  scheduler-migrate:
+    build:
+      context: ./scheduler
+      dockerfile: Dockerfile.migrate
+    container_name: scheduler-migrate
+    environment:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: ${SCHEDULER_DB_URL}
+    depends_on:
+      scheduler-db:
+        condition: service_healthy
+    networks:
+      - fortinet
+    restart: "no"
+
+  executor-migrate:
+    build:
+      context: ./executor
+      dockerfile: Dockerfile.migrate
+    container_name: executor-migrate
+    environment:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: ${EXECUTOR_DB_URL}
+    depends_on:
+      executor-db:
+        condition: service_healthy
+    networks:
+      - fortinet
+    restart: "no"
+
   # ─── Services ─── #
 
   scheduler:
@@ -53,6 +85,8 @@ services:
     depends_on:
       scheduler-db:
         condition: service_healthy
+      scheduler-migrate:
+        condition: service_completed_successfully
     networks:
       - fortinet
     restart: unless-stopped
@@ -68,6 +102,8 @@ services:
     depends_on:
       executor-db:
         condition: service_healthy
+      executor-migrate:
+        condition: service_completed_successfully
     networks:
       - fortinet
     restart: unless-stopped

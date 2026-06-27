@@ -1,0 +1,12 @@
+# migrate image only needs migrations/ — exclude everything else
+app/
+run.py
+requirements.txt
+__pycache__
+*.pyc
+*.pyo
+.env
+.env.*
+Dockerfile
+Dockerfile.dockerignore
+.dockerignore

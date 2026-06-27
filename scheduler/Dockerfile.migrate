@@ -1,0 +1,12 @@
+FROM alpine:3.19
+# auto-set by BuildKit to amd64 or arm64 depending on host
+ARG TARGETARCH
+RUN apk add --no-cache ca-certificates curl && \
+    curl -fsSL "https://github.com/pressly/goose/releases/latest/download/goose_linux_${TARGETARCH}" \
+    -o /usr/local/bin/goose && \
+    chmod +x /usr/local/bin/goose && \
+    apk del curl
+COPY migrations /migrations
+ENV GOOSE_MIGRATION_DIR=/migrations
+ENTRYPOINT ["goose"]
+CMD ["up"]

@@ -12,6 +12,8 @@ A microservice backend for scheduling tasks, triggering webhooks, and handling a
 | Executor | `8090` | Receives webhooks, processes them sync or async |
 | Scheduler DB | `5432` | PostgreSQL — stores tasks and attempt history |
 | Executor DB | `5433` | PostgreSQL — stores webhook execution records |
+| scheduler-migrate | — | Runs Goose migrations on scheduler DB at startup |
+| executor-migrate | — | Runs Goose migrations on executor DB at startup |
 
 ---
 
@@ -42,14 +44,15 @@ cp .env.example .env
 **Option A — Full Docker (recommended)**
 ```bash
 make docker-build
-make docker-up
+make docker-up        # DBs → migrations → services, in order
 ```
 
 **Option B — Local dev (Python local, DB in Docker)**
 ```bash
-make db       # start databases in Docker
-make install  # install Python deps
-make dev      # start both services with hot reload
+make db               # start databases in Docker
+make migrate          # run migrations
+make install          # install Python deps
+make dev              # start both services with hot reload
 ```
 
 ---
@@ -61,10 +64,12 @@ docker ps
 ```
 
 ```
-scheduler     0.0.0.0:8080   Up
-executor      0.0.0.0:8090   Up
-scheduler-db  0.0.0.0:5432   Up (healthy)
-executor-db   0.0.0.0:5433   Up (healthy)
+scheduler         0.0.0.0:8080   Up
+executor          0.0.0.0:8090   Up
+scheduler-db      0.0.0.0:5432   Up (healthy)
+executor-db       0.0.0.0:5433   Up (healthy)
+scheduler-migrate —              Exited (0)
+executor-migrate  —              Exited (0)
 ```
 
 ```bash
@@ -92,10 +97,19 @@ make db-stop          # stop containers (data preserved)
 make db-logs          # tail database logs
 ```
 
+### # ─── Migrations ─── #
+```bash
+make migrate              # run pending migrations on both DBs
+make migrate-scheduler    # scheduler DB only
+make migrate-executor     # executor DB only
+make migrate-down         # roll back last migration on both DBs
+make migrate-status       # show applied / pending migrations
+```
+
 ### # ─── Full Docker ─── #
 ```bash
 make docker-build     # build images
-make docker-up        # start all 4 containers
+make docker-up        # start all containers (runs migrations automatically)
 make docker-logs      # tail service logs
 make docker-down      # stop everything + wipe volumes
 ```
@@ -104,14 +118,14 @@ make docker-down      # stop everything + wipe volumes
 
 ## API Docs
 
-Swagger UI — auto-generated, available once services are running:
+FastAPI serves interactive docs automatically once services are running.
 
-| Service | URL |
-|---|---|
-| Scheduler | http://localhost:8080/docs |
-| Executor | http://localhost:8090/docs |
+| Service | Swagger UI | ReDoc | OpenAPI JSON |
+|---|---|---|---|
+| Scheduler | http://localhost:8080/docs | http://localhost:8080/redoc | http://localhost:8080/openapi.json |
+| Executor | http://localhost:8090/docs | http://localhost:8090/redoc | http://localhost:8090/openapi.json |
 
-Postman collection also available — `Fortinet.postman_collection.json`
+> Postman collection also available — `Fortinet.postman_collection.json`
 
 ---
 
@@ -195,6 +209,10 @@ fortinet/
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   ├── run.py                        # validates env + starts uvicorn
+│   ├── migrations/                   # Goose SQL migrations
+│   │   ├── 00001_create_enums.sql
+│   │   ├── 00002_create_tasks.sql
+│   │   └── 00003_create_task_attempts.sql
 │   └── app/
 │       ├── main.py                   # app wiring — lifespan, middleware, router
 │       ├── state_machine.py          # task status transition guard
@@ -217,6 +235,9 @@ fortinet/
     ├── Dockerfile
     ├── requirements.txt
     ├── run.py
+    ├── migrations/                   # Goose SQL migrations
+    │   ├── 00001_create_enums.sql
+    │   └── 00002_create_executions.sql
     └── app/
         ├── main.py
         ├── api/
@@ -238,11 +259,11 @@ fortinet/
 | Layer | Technology |
 |---|---|
 | Language | Python 3.11 |
-| Framework | FastAPI 0.115 |
+| Framework | FastAPI 0.128 |
 | Config | pydantic-settings 2.x |
 | Database | PostgreSQL 16 |
 | DB Driver | asyncpg 0.29 |
+| Migrations | Goose (pressly/goose) |
 | Logging | structlog 24.4 |
-| Scheduler | APScheduler 3.x *(coming soon)* |
-| HTTP Client | httpx 0.27 *(coming soon)* |
+| Security | secure 0.3 |
 | Containers | Docker + docker compose v2 |

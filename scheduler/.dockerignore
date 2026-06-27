@@ -1,0 +1,11 @@
+# python artifacts
+__pycache__
+*.pyc
+*.pyo
+
+# never bake secrets into the image
+.env
+.env.*
+
+Dockerfile*
+.dockerignore

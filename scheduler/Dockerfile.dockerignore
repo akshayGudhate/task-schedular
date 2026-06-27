@@ -1,0 +1,14 @@
+# python artifacts
+__pycache__
+*.pyc
+*.pyo
+
+# never bake secrets into the image
+.env
+.env.*
+
+# migrations live in their own image
+migrations/
+
+Dockerfile*
+.dockerignore
