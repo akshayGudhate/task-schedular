@@ -1,0 +1,66 @@
+{
+	"info": {
+		"_postman_id": "90986c21-9da9-41a9-ad1a-3ef38a68d1bf",
+		"name": "Fortinet",
+		"description": "**Fortinet's Task Automation & Scheduling System**\n\n  \nA microservice backend for scheduling tasks, triggering webhooks, and handling async execution with retries.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "56216369",
+		"_collection_link": "https://akshay-gudhate-1530c79f-9896800.postman.co/workspace/Akshay-Gudhate's-Workspace~ce252384-f0ba-4058-8b3e-49d98b16060a/collection/56216369-90986c21-9da9-41a9-ad1a-3ef38a68d1bf?action=share&source=collection_link&creator=56216369"
+	},
+	"item": [
+		{
+			"name": "Health Checks",
+			"item": [
+				{
+					"name": "Executor",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{EXECUTOR_URL}}/health",
+							"host": [
+								"{{EXECUTOR_URL}}"
+							],
+							"path": [
+								"health"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"requests": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"requests": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "EXECUTOR_URL",
+			"value": ""
+		},
+		{
+			"key": "SCHEDULAR_URL",
+			"value": ""
+		}
+	]
+}

@@ -1,0 +1,22 @@
+# docs files
+docs/
+tests/
+scripts/
+
+# env files
+.env
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# python files
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.DS_Store
+
+# setup files
+.vscode/
+.idea/
