@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import structlog
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
 log = structlog.get_logger()
 
-# app error
+
 class AppError(Exception):
     # base for all domain errors — subclass to set status_code and error_code
-    status_code: int = 500
+    status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR
     error_code:  str = "INTERNAL_ERROR"
 
     def __init__(self, message: str) -> None:
@@ -17,32 +17,27 @@ class AppError(Exception):
         super().__init__(message)
 
 
-# not found error
 class NotFoundError(AppError):
-    status_code = 404
+    status_code = status.HTTP_404_NOT_FOUND
     error_code  = "NOT_FOUND"
 
 
-# conflict error
 class ConflictError(AppError):
-    # valid op, wrong state — e.g. cancelling a task that's already done
-    status_code = 409
+    # valid op, wrong state — e.g. execution already in a terminal state
+    status_code = status.HTTP_409_CONFLICT
     error_code  = "CONFLICT"
 
 
-# bad request error
 class BadRequestError(AppError):
     # domain-level bad input, distinct from pydantic's 422
-    status_code = 400
+    status_code = status.HTTP_400_BAD_REQUEST
     error_code  = "BAD_REQUEST"
 
 
-# error body
 def _error_body(message: str, error_code: str) -> dict:
     return {"detail": message, "error_code": error_code}
 
 
-# app error handler
 async def _app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     log.warning(
         "app.error",
@@ -56,7 +51,6 @@ async def _app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     )
 
 
-# unhandled error handler
 async def _unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
     # last resort — log traceback, return safe 500
     log.error(
@@ -66,12 +60,11 @@ async def _unhandled_error_handler(request: Request, exc: Exception) -> JSONResp
         exc_info=True,
     )
     return JSONResponse(
-        status_code=500,
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=_error_body("internal server error", "INTERNAL_ERROR"),
     )
 
 
-# register error handlers
 def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AppError, _app_error_handler)          # type: ignore[arg-type]
     app.add_exception_handler(Exception, _unhandled_error_handler)   # type: ignore[arg-type]

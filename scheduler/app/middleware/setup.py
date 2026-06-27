@@ -6,13 +6,11 @@ from app.core.config import get_settings
 from app.middleware.request_id import RequestIdMiddleware
 from app.middleware.security import SecureHeadersMiddleware
 
-# get settings
-settings = get_settings()
 
-# register middleware
 def register_middleware(app: FastAPI) -> None:
     # last added = outermost (first to receive the request)
-    # request flow:  CORS → GZip → SecureHeaders → RequestId → routes
+    # request flow: CORS → GZip → SecureHeaders → RequestId → routes
+    settings = get_settings()
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(SecureHeadersMiddleware)
     app.add_middleware(GZipMiddleware, minimum_size=1000)

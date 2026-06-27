@@ -8,10 +8,10 @@ A microservice backend for scheduling tasks, triggering webhooks, and handling a
 
 | Service | Port | Description |
 |---|---|---|
-| Scheduler | `8080` | Accepts tasks, fires webhooks at scheduled time, handles retries |
-| Executor | `8090` | Receives webhooks, processes them sync or async |
-| Scheduler DB | `5432` | PostgreSQL — stores tasks and attempt history |
-| Executor DB | `5433` | PostgreSQL — stores webhook execution records |
+| Scheduler | `8080` | Accepts tasks via API, fires webhooks at scheduled time, handles retries |
+| Executor | `8090` | Receives webhooks, processes them sync or async, records outcomes |
+| Scheduler DB | `5432` | PostgreSQL — tasks and attempt history |
+| Executor DB | `5433` | PostgreSQL — webhook execution records |
 | scheduler-migrate | — | Runs Goose migrations on scheduler DB at startup |
 | executor-migrate | — | Runs Goose migrations on executor DB at startup |
 
@@ -79,9 +79,37 @@ curl http://localhost:8090/health
 
 ---
 
+## API Endpoints
+
+### Scheduler — `http://localhost:8080`
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Liveness check |
+| `POST` | `/tasks` | Create a scheduled task |
+| `GET` | `/tasks` | List tasks (filter by status, paginate) |
+| `GET` | `/tasks/{task_id}` | Get task + full attempt history |
+| `PATCH` | `/tasks/{task_id}/cancel` | Cancel a task (CREATED or PENDING only) |
+
+### Executor — `http://localhost:8090`
+
+| Method | Path | Mode | Description |
+|---|---|---|---|
+| `GET` | `/health` | — | Liveness check |
+| `POST` | `/send-welcome` | Sync 200 | Send welcome email |
+| `POST` | `/security-alert` | Sync 200 | Dispatch security alert |
+| `POST` | `/notify-admin` | Async 202 | Notify admin on new signup |
+| `POST` | `/daily-report` | Async 202 | Trigger daily summary report |
+| `GET` | `/status/{execution_id}` | — | Poll async execution status |
+
+**Async flow:** `POST /notify-admin` or `POST /daily-report` returns `202` with a `check_url`.
+Poll `GET /status/{execution_id}` until `status` is `COMPLETED` or `FAILED`.
+
+---
+
 ## Commands
 
-### # ─── Local Dev ─── #
+### Local Dev
 ```bash
 make install          # install Python deps for both services
 make dev              # run both with hot reload
@@ -90,14 +118,14 @@ make dev-executor     # executor only  → :8090
 make stop             # kill both services
 ```
 
-### # ─── Database Only ─── #
+### Database Only
 ```bash
 make db               # start both postgres containers
 make db-stop          # stop containers (data preserved)
 make db-logs          # tail database logs
 ```
 
-### # ─── Migrations ─── #
+### Migrations
 ```bash
 make migrate              # run pending migrations on both DBs
 make migrate-scheduler    # scheduler DB only
@@ -106,7 +134,7 @@ make migrate-down         # roll back last migration on both DBs
 make migrate-status       # show applied / pending migrations
 ```
 
-### # ─── Full Docker ─── #
+### Full Docker
 ```bash
 make docker-build     # build images
 make docker-up        # start all containers (runs migrations automatically)
@@ -124,8 +152,6 @@ FastAPI serves interactive docs automatically once services are running.
 |---|---|---|---|
 | Scheduler | http://localhost:8080/docs | http://localhost:8080/redoc | http://localhost:8080/openapi.json |
 | Executor | http://localhost:8090/docs | http://localhost:8090/redoc | http://localhost:8090/openapi.json |
-
-> Postman collection also available — `Fortinet.postman_collection.json`
 
 ---
 
@@ -207,49 +233,59 @@ fortinet/
 │   └── agents.md
 ├── scheduler/
 │   ├── Dockerfile
+│   ├── Dockerfile.migrate
 │   ├── requirements.txt
-│   ├── run.py                        # validates env + starts uvicorn
-│   ├── migrations/                   # Goose SQL migrations
+│   ├── run.py
+│   ├── migrations/
 │   │   ├── 00001_create_enums.sql
 │   │   ├── 00002_create_tasks.sql
 │   │   └── 00003_create_task_attempts.sql
 │   └── app/
-│       ├── main.py                   # app wiring — lifespan, middleware, router
-│       ├── state_machine.py          # task status transition guard
+│       ├── main.py               # app wiring — lifespan, middleware, router
+│       ├── state_machine.py      # task status transition guard
 │       ├── api/
-│       │   └── routes.py             # all HTTP routes
+│       │   ├── routes.py         # top-level router — includes tasks + health
+│       │   └── tasks.py          # POST/GET /tasks, GET /tasks/{id}, PATCH /tasks/{id}/cancel
 │       ├── core/
-│       │   ├── config.py             # pydantic settings
-│       │   ├── errors.py             # exception hierarchy + handlers
-│       │   └── logging.py            # structlog setup
+│       │   ├── config.py         # pydantic-settings — raises on startup if required vars missing
+│       │   ├── errors.py         # exception hierarchy + FastAPI error handlers
+│       │   └── logging.py        # structlog JSON setup
 │       ├── db/
-│       │   └── database.py           # asyncpg connection pool
+│       │   └── database.py       # asyncpg singleton pool — get_pool / create_pool / close_pool
 │       ├── middleware/
-│       │   ├── request_id.py         # X-Request-ID + structured logging per request
-│       │   ├── security.py           # secure response headers
-│       │   └── setup.py              # registers all middleware on the app
+│       │   ├── request_id.py     # injects X-Request-ID, binds to structlog context
+│       │   ├── security.py       # secure HTTP response headers
+│       │   └── setup.py          # registers all middleware on the app
 │       └── models/
-│           ├── task.py               # Task + TaskStatus + RecurrenceType
-│           └── task_attempt.py       # TaskAttempt + AttemptStatus
+│           └── task.py           # enums (TaskStatus, RecurrenceType, AttemptStatus) + request/response models
 └── executor/
     ├── Dockerfile
+    ├── Dockerfile.migrate
     ├── requirements.txt
     ├── run.py
-    ├── migrations/                   # Goose SQL migrations
+    ├── migrations/
     │   ├── 00001_create_enums.sql
     │   └── 00002_create_executions.sql
     └── app/
         ├── main.py
         ├── api/
-        │   └── routes.py
+        │   ├── routes.py         # top-level router — includes webhooks, status, health
+        │   ├── webhooks.py       # POST /send-welcome, /security-alert, /notify-admin, /daily-report
+        │   └── status.py         # GET /status/{execution_id}
         ├── core/
         │   ├── config.py
         │   ├── errors.py
         │   └── logging.py
+        ├── db/
+        │   └── database.py       # asyncpg singleton pool
         ├── middleware/
         │   ├── request_id.py
         │   ├── security.py
         │   └── setup.py
+        ├── models/
+        │   └── execution.py      # ExecutionStatus enum + request/response models
+        └── services/
+            └── execution_service.py
 ```
 
 ---

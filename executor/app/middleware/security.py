@@ -5,10 +5,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-# singleton — headers computed once at startup
-_secure = secure.Secure()
+_secure = secure.Secure()  # singleton — headers computed once at startup
 
-# security headers middleware
+
 class SecureHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         response = await call_next(request)

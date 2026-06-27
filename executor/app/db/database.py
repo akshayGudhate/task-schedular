@@ -24,7 +24,7 @@ async def create_pool() -> None:
     global _pool
     s = get_settings()
     _pool = await asyncpg.create_pool(
-        s.SCHEDULER_DB_URL,
+        s.EXECUTOR_DB_URL,
         min_size=s.DB_POOL_MIN_SIZE,
         max_size=s.DB_POOL_MAX_SIZE,
         command_timeout=60,

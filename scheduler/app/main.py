@@ -4,9 +4,10 @@ import structlog
 from fastapi import FastAPI
 
 from app.api.routes import router
-from app.core.config import get_settings, check_required_env_vars
+from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 from app.core.logging import setup_logging
+from app.db.database import create_pool, close_pool
 from app.middleware.setup import register_middleware
 
 settings = get_settings()
@@ -17,6 +18,10 @@ setup_logging(debug=settings.DEBUG)
 log = structlog.get_logger()
 
 _tags = [
+    {
+        "name": "tasks",
+        "description": "Create and manage scheduled tasks.",
+    },
     {
         "name": "health",
         "description": "Liveness check — confirms the service is up and reachable.",
@@ -37,11 +42,10 @@ scheduled time, handles retries with exponential backoff, and tracks every attem
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    missing = check_required_env_vars()
-    if missing:
-        raise RuntimeError(f"missing required env vars: {missing}")
+    await create_pool()
     log.info("scheduler.starting", version=settings.APP_VERSION)
     yield
+    await close_pool()
     log.info("scheduler.stopped")
 
 
