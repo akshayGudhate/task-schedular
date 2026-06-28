@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -34,7 +34,7 @@ class TaskCreate(BaseModel):
     name:            str
     execution_time:  datetime
     webhook_url:     str
-    payload:         dict           = Field(default_factory=dict)
+    payload:         dict[str, Any] = Field(default_factory=dict)
     recurrence:      RecurrenceType = RecurrenceType.NONE
     cron_expression: Optional[str]  = None
     max_retries:     int            = Field(default=3, ge=0)

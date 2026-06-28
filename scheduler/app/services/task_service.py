@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
@@ -84,7 +85,7 @@ async def list_tasks(
     async with get_connection() as conn:
         if status:
             rows = await conn.fetch(
-                "SELECT * FROM tasks WHERE status = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+                "SELECT * FROM tasks WHERE status = $1::task_status ORDER BY created_at DESC LIMIT $2 OFFSET $3",
                 status.value, limit, offset,
             )
         else:
@@ -111,18 +112,31 @@ async def get_task_with_attempts(task_id: UUID) -> TaskDetailResponse:
 
 
 async def cancel_task(task_id: UUID) -> TaskResponse:
+    await _transition(task_id, TaskStatus.CANCELLED)
     async with get_connection() as conn:
-        row = await conn.fetchrow("SELECT status FROM tasks WHERE id = $1", task_id)
-        if not row:
-            raise NotFoundError(f"task {task_id} not found")
+        row = await conn.fetchrow("SELECT * FROM tasks WHERE id = $1", task_id)
+    return _to_task_response(row)
 
-        guard(TaskStatus(row["status"]), TaskStatus.CANCELLED)
 
-        updated = await conn.fetchrow(
-            "UPDATE tasks SET status = 'CANCELLED', updated_at = NOW() WHERE id = $1 RETURNING *",
-            task_id,
+async def clone_task(task: TaskResponse, next_execution_time: datetime) -> TaskResponse:
+    # parent_task_id threads the chain — GET /tasks?parent_task_id=X shows the full recurrence history
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            """
+            INSERT INTO tasks (name, execution_time, webhook_url, payload, recurrence, cron_expression, max_retries, parent_task_id)
+            VALUES ($1, $2, $3, $4::jsonb, $5::recurrence_type, $6, $7, $8)
+            RETURNING *
+            """,
+            task.name,
+            next_execution_time,
+            task.webhook_url,
+            json.dumps(task.payload),
+            task.recurrence,
+            task.cron_expression,
+            task.max_retries,
+            UUID(task.id),
         )
-    return _to_task_response(updated)
+    return _to_task_response(row)
 
 
 async def get_task(task_id: UUID) -> Optional[TaskResponse]:
@@ -162,7 +176,7 @@ async def _transition(task_id: UUID, next_status: TaskStatus) -> None:
     valid_from = [s.value for s, allowed in ALLOWED_TRANSITIONS.items() if next_status in allowed]
     async with get_connection() as conn:
         row = await conn.fetchrow(
-            "UPDATE tasks SET status = $2, updated_at = NOW() WHERE id = $1 AND status = ANY($3::text[]) RETURNING id",
+            "UPDATE tasks SET status = $2::task_status, updated_at = NOW() WHERE id = $1 AND status::text = ANY($3) RETURNING id",
             task_id, next_status.value, valid_from,
         )
         if row:
@@ -175,6 +189,10 @@ async def _transition(task_id: UUID, next_status: TaskStatus) -> None:
         f"task cannot move from {current['status']} → {next_status.value} "
         f"(valid predecessors: {valid_from or 'none — terminal state'})"
     )
+
+
+async def mark_pending(task_id: UUID) -> None:
+    await _transition(task_id, TaskStatus.PENDING)
 
 
 async def mark_running(task_id: UUID) -> None:

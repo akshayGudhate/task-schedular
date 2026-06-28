@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -18,7 +18,7 @@ class ExecutionStatus(str, Enum):
 class ExecutionRequest(BaseModel):
     task_id:    UUID
     attempt_id: UUID
-    payload:    dict = Field(default_factory=dict)
+    payload:    dict[str, Any] = Field(default_factory=dict)
 
 
 class WebhookResponse(BaseModel):

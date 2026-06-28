@@ -1,6 +1,34 @@
 # Task Automation & Scheduling System
 
-A microservice backend for scheduling tasks, triggering webhooks, and handling async execution with retries.
+A microservice backend for scheduling tasks, triggering webhooks, and handling async execution with retries and recurring runs.
+
+---
+
+## How It Works
+
+```
+POST /tasks  ──►  Scheduler DB (tasks table)  →  CREATED
+                       │
+                  APScheduler DateTrigger armed
+                  (execution_time reached → PENDING → RUNNING)
+                       │
+                       ▼
+              httpx POST → Executor
+                       │
+          ┌────────────┼──────────────┐
+          │            │              │
+        200 OK       202 Accepted   non-2xx / timeout
+          │            │              │
+        SUCCESS    poll check_url    retry (exponential backoff)
+                       │              │
+                   COMPLETED     retry_count < max_retries?
+                       │              │
+                    SUCCESS       YES → RETRYING → fire again
+                                  NO  → FAILED
+```
+
+After every `SUCCESS`, if the task has a `recurrence` (HOURLY / DAILY / CUSTOM_CRON), the
+scheduler automatically clones it with the next `execution_time` — the chain continues indefinitely.
 
 ---
 
@@ -107,6 +135,46 @@ Poll `GET /status/{execution_id}` until `status` is `COMPLETED` or `FAILED`.
 
 ---
 
+## Seed Data
+
+On first startup the scheduler pre-loads 4 sample tasks that fire automatically within 2 minutes — no manual API calls needed to see the system in action.
+
+| # | Task | Endpoint | Mode | Fires at | Recurrence |
+|---|---|---|---|---|---|
+| 1 | Send Welcome Email | `/send-welcome` | Sync 200 | +30 s | None |
+| 2 | Notify Admin on New Signup | `/notify-admin` | Async 202 | +60 s | None |
+| 3 | Daily Summary Report | `/daily-report` | Async 202 | +90 s | **Daily** |
+| 4 | Security Alert Notification | `/security-alert` | Sync 200 | +120 s | None |
+
+After "Daily Summary Report" succeeds, a new task row automatically appears with `execution_time + 24 h`.
+
+---
+
+## Recurring Tasks
+
+Set `recurrence` on any task to keep it running indefinitely:
+
+```json
+{
+  "name": "Hourly Health Check",
+  "execution_time": "2026-06-28T10:00:00Z",
+  "webhook_url": "http://executor:8090/security-alert",
+  "payload": {"severity": "low"},
+  "recurrence": "HOURLY"
+}
+```
+
+| Value | Behaviour |
+|---|---|
+| `NONE` | One-shot — fires once, done |
+| `HOURLY` | Clones with `execution_time + 1 h` after each success |
+| `DAILY` | Clones with `execution_time + 24 h` after each success |
+| `CUSTOM_CRON` | Requires `cron_expression` — next run computed via croniter |
+
+Each recurring run is a separate task row with `parent_task_id` pointing back to its predecessor, giving you a full audit trail.
+
+---
+
 ## Task Lifecycle
 
 ```
@@ -114,7 +182,10 @@ POST /tasks
     │
     ▼
 CREATED ──────────────────────────────────────────► CANCELLED
-    │  (scheduled via APScheduler DateTrigger)
+    │  (APScheduler DateTrigger armed)
+    ▼
+PENDING ──────────────────────────────────────────► CANCELLED
+    │  (execution_time reached — webhook about to fire)
     ▼
 RUNNING
     │
@@ -125,9 +196,11 @@ RUNNING
     │       └── FAILED    ──► RETRYING (if retries remain) or FAILED
     │
     └── non-2xx / timeout
-            ├── retries remain → RETRYING ──► RUNNING (exponential backoff: 60s, 120s, 240s…)
+            ├── retries remain → RETRYING ──► RUNNING (exponential backoff: 60 s, 120 s, 240 s…)
             └── retries exhausted ────────────────► FAILED
 ```
+
+`CANCEL` is only allowed from `CREATED` or `PENDING` — once `RUNNING` or `RETRYING` the task is mid-flight and cannot be stopped.
 
 Every attempt (including retries) is recorded with `http_status`, `duration_ms`, and `response_body`.
 Retrieve them via `GET /tasks/{task_id}` (the `attempts` array).
@@ -278,7 +351,8 @@ fortinet/
 │       │   ├── errors.py         # exception hierarchy + FastAPI error handlers
 │       │   └── logging.py        # structlog JSON setup
 │       ├── db/
-│       │   └── database.py       # asyncpg singleton pool — get_pool / create_pool / close_pool
+│       │   ├── database.py       # asyncpg singleton pool — get_pool / create_pool / close_pool
+│       │   └── seed.py           # inserts 4 sample tasks on first startup (idempotent)
 │       ├── middleware/
 │       │   ├── request_id.py     # injects X-Request-ID, binds to structlog context
 │       │   ├── security.py       # secure HTTP response headers
@@ -286,8 +360,8 @@ fortinet/
 │       ├── models/
 │       │   └── task.py           # enums (TaskStatus, RecurrenceType, AttemptStatus) + request/response models
 │       └── services/
-│           ├── job_runner.py         # merged: APScheduler singleton + shared httpx client + fire/poll/retry logic
-│           └── task_service.py       # all DB ops: tasks CRUD + attempt lifecycle
+│           ├── job_runner.py         # APScheduler singleton + shared httpx client + fire/retry/poll/recurrence logic
+│           └── task_service.py       # all DB ops: tasks CRUD, attempt lifecycle, clone for recurrence
 └── executor/
     ├── Dockerfile
     ├── Dockerfile.migrate
@@ -331,6 +405,7 @@ fortinet/
 | DB Driver | asyncpg 0.29 |
 | Migrations | Goose (pressly/goose) |
 | Scheduler | APScheduler 3.10 |
+| Cron Parser | croniter 1.4 |
 | HTTP Client | httpx 0.27 |
 | Logging | structlog 24.4 |
 | Security | secure 0.3 |

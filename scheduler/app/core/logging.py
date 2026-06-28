@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import logging
 import sys
+from typing import Any
 
 import structlog
 
 
-def _add_service_name(logger: object, method: str, event_dict: dict) -> dict:
+def _add_service_name(logger: object, method: str, event_dict: dict[str, Any]) -> dict[str, Any]:
     # needed when multiple services share a log aggregator
     event_dict["service"] = "scheduler"
     return event_dict

@@ -7,12 +7,13 @@ from uuid import UUID
 
 import httpx
 import structlog
+from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.date import DateTrigger
 from fastapi import status
 
 from app.core.config import get_settings
-from app.models.task import TaskResponse, TaskStatus
+from app.models.task import RecurrenceType, TaskResponse, TaskStatus
 from app.services import task_service
 
 log = structlog.get_logger()
@@ -28,6 +29,7 @@ def get_scheduler() -> AsyncIOScheduler:
 
 
 def _get_client() -> httpx.AsyncClient:
+    # private — only job_runner internals should touch the shared client
     if _client is None:
         raise RuntimeError("job runner not started — call start() in lifespan first")
     return _client
@@ -36,10 +38,10 @@ def _get_client() -> httpx.AsyncClient:
 async def start() -> None:
     global _scheduler, _client
     settings = get_settings()
-    _client = httpx.AsyncClient(timeout=settings.WEBHOOK_TIMEOUT_SECONDS)
+    _client = httpx.AsyncClient(timeout=settings.WEBHOOK_TIMEOUT_SECONDS)  # one client, reuses connections across all webhook calls
     _scheduler = AsyncIOScheduler()
     _scheduler.start()
-    await task_service.recover_running_tasks()
+    await task_service.recover_running_tasks()  # fix any tasks left RUNNING from a previous crash
     await _reload_pending()
     log.info("job_runner.started")
 
@@ -62,7 +64,7 @@ def schedule_task(task_id: UUID, execution_time: datetime) -> None:
         trigger=DateTrigger(run_date=execution_time),
         args=[task_id],
         id=str(task_id),
-        replace_existing=True,
+        replace_existing=True,  # idempotent — safe to call on restart, won't double-schedule
         misfire_grace_time=settings.MISFIRE_GRACE_TIME_SECONDS,
     )
     log.info("task.scheduled", task_id=str(task_id), run_at=execution_time.isoformat())
@@ -101,7 +103,7 @@ def cancel_job(task_id: UUID) -> None:
     try:
         get_scheduler().remove_job(str(task_id))
         log.info("task.job_cancelled", task_id=str(task_id))
-    except Exception:
+    except JobLookupError:
         pass  # job already fired or was never in the scheduler
 
 
@@ -130,6 +132,8 @@ async def fire_webhook(task_id: UUID) -> None:
         log.info("webhook.skip", task_id=str(task_id), status=task.status)
         return
 
+    if task.status == TaskStatus.CREATED:
+        await task_service.mark_pending(task_id)  # CREATED → PENDING → RUNNING; retries go RETRYING → RUNNING directly
     attempt_number = task.retry_count + 1
     attempt_id = await task_service.create_attempt(task_id, attempt_number)
     await task_service.mark_running(task_id)
@@ -154,6 +158,7 @@ async def fire_webhook(task_id: UUID) -> None:
         elif resp.is_success:
             await task_service.complete_attempt(attempt_id, resp.status_code, resp.text, duration_ms)
             await task_service.mark_success(task_id)
+            await _schedule_next_run(task)
             log.info("webhook.success", task_id=str(task_id), http_status=resp.status_code, duration_ms=duration_ms)
 
         else:
@@ -184,6 +189,8 @@ async def _poll_execution(task_id: UUID, check_url: str, attempt_id: UUID, poll_
             duration_ms = data.get("duration_ms") or 0
             await task_service.complete_attempt(attempt_id, status.HTTP_200_OK, resp.text, duration_ms)
             await task_service.mark_success(task_id)
+            task = await task_service.get_task(task_id)
+            await _schedule_next_run(task)
             log.info("webhook.poll_completed", task_id=str(task_id), polls=poll_count + 1)
 
         elif exec_status == "FAILED":
@@ -192,14 +199,41 @@ async def _poll_execution(task_id: UUID, check_url: str, attempt_id: UUID, poll_
             log.warning("webhook.poll_failed", task_id=str(task_id))
             await _handle_failure(task_id, attempt_id, error, 0, task)
 
+        elif exec_status in ("RECEIVED", "PROCESSING"):
+            _schedule_poll(task_id, check_url, attempt_id, poll_count + 1)
         else:
-            # RECEIVED or PROCESSING — keep polling
+            log.warning("webhook.poll_unknown_status", task_id=str(task_id), exec_status=exec_status)
             _schedule_poll(task_id, check_url, attempt_id, poll_count + 1)
 
     except Exception:
         log.error("webhook.poll_error", task_id=str(task_id), poll_count=poll_count, exc_info=True)
         # transient error polling the executor — retry the poll itself
         _schedule_poll(task_id, check_url, attempt_id, poll_count + 1)
+
+
+async def _schedule_next_run(task: TaskResponse) -> None:
+    if task.recurrence == RecurrenceType.NONE:
+        return
+
+    base = task.execution_time  # anchor to original time to avoid drift (don't use wall clock)
+
+    if task.recurrence == RecurrenceType.HOURLY:
+        next_time = base + timedelta(hours=1)
+    elif task.recurrence == RecurrenceType.DAILY:
+        next_time = base + timedelta(days=1)
+    elif task.recurrence == RecurrenceType.CUSTOM_CRON:
+        from croniter import croniter  # deferred — only needed for CUSTOM_CRON tasks
+        next_time = croniter(task.cron_expression, base).get_next(datetime)
+        if next_time.tzinfo is None:
+            next_time = next_time.replace(tzinfo=timezone.utc)
+    else:
+        log.error("task.unknown_recurrence", task_id=str(task.id), recurrence=task.recurrence)
+        return
+
+    cloned = await task_service.clone_task(task, next_time)
+    schedule_task(UUID(cloned.id), next_time)
+    log.info("task.next_run_scheduled",
+             task_id=str(task.id), next_task_id=cloned.id, next_run=next_time.isoformat())
 
 
 async def _handle_failure(

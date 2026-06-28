@@ -20,8 +20,6 @@ class Settings(BaseSettings):
     DB_POOL_MIN_SIZE: int = 2
     DB_POOL_MAX_SIZE: int = 10
 
-    EXECUTION_TIMEOUT_SECONDS: int = 300
-
 
 @lru_cache
 def get_settings() -> Settings:

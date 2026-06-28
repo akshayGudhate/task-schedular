@@ -17,5 +17,6 @@ router.include_router(status_api.router, tags=["status"])
 )
 def health():
     from app.core.config import get_settings
+
     s = get_settings()
     return {"status": "ok", "service": s.APP_NAME, "version": s.APP_VERSION}

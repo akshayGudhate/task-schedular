@@ -22,19 +22,7 @@ class NotFoundError(AppError):
     error_code  = "NOT_FOUND"
 
 
-class ConflictError(AppError):
-    # valid op, wrong state — e.g. execution already in a terminal state
-    status_code = status.HTTP_409_CONFLICT
-    error_code  = "CONFLICT"
-
-
-class BadRequestError(AppError):
-    # domain-level bad input, distinct from pydantic's 422
-    status_code = status.HTTP_400_BAD_REQUEST
-    error_code  = "BAD_REQUEST"
-
-
-def _error_body(message: str, error_code: str) -> dict:
+def _error_body(message: str, error_code: str) -> dict[str, str]:
     return {"detail": message, "error_code": error_code}
 
 

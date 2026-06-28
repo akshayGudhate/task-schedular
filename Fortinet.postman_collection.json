@@ -1,8 +1,8 @@
 {
 	"info": {
 		"_postman_id": "90986c21-9da9-41a9-ad1a-3ef38a68d1bf",
-		"name": "Fortinet",
-		"description": "**Fortinet's Task Automation & Scheduling System**\n\n  \nA microservice backend for scheduling tasks, triggering webhooks, and handling async execution with retries.",
+		"name": "Fortinet — Task Automation & Scheduling System",
+		"description": "**Task Automation & Scheduling System** — two FastAPI microservices.\n\n**Scheduler** (`:8080`) accepts tasks, fires webhooks at scheduled time, handles retries and recurrence.\n**Executor** (`:8090`) receives webhooks, processes them sync or async, exposes a polling endpoint.\n\n### Quick start\n```\nmake docker-up\n```\nOn first startup the scheduler seeds 4 sample tasks that fire automatically within 2 minutes.\n\n### Collection variables\n| Variable | Default | Description |\n|---|---|---|\n| `SCHEDULER_URL` | `http://localhost:8080` | Scheduler service base URL |\n| `EXECUTOR_URL` | `http://localhost:8090` | Executor service base URL |\n| `task_id` | *(auto-set)* | Captured from `POST /tasks` response |\n| `execution_id` | *(auto-set)* | Captured from async 202 webhook response |",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "56216369",
 		"_collection_link": "https://akshay-gudhate-1530c79f-9896800.postman.co/workspace/Akshay-Gudhate's-Workspace~ce252384-f0ba-4058-8b3e-49d98b16060a/collection/56216369-90986c21-9da9-41a9-ad1a-3ef38a68d1bf?action=share&source=collection_link&creator=56216369"
@@ -12,19 +12,529 @@
 			"name": "Health Checks",
 			"item": [
 				{
-					"name": "Executor",
+					"name": "Scheduler Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{SCHEDULER_URL}}/health",
+							"host": ["{{SCHEDULER_URL}}"],
+							"path": ["health"]
+						},
+						"description": "Liveness check for the Scheduler service. Returns `ok` when the service is up and the DB pool is initialized."
+					},
+					"response": []
+				},
+				{
+					"name": "Executor Health",
 					"request": {
 						"method": "GET",
 						"header": [],
 						"url": {
 							"raw": "{{EXECUTOR_URL}}/health",
-							"host": [
-								"{{EXECUTOR_URL}}"
-							],
-							"path": [
-								"health"
-							]
+							"host": ["{{EXECUTOR_URL}}"],
+							"path": ["health"]
+						},
+						"description": "Liveness check for the Executor service. Returns `ok` when the service is up and the DB pool is initialized."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Scheduler — Tasks",
+			"item": [
+				{
+					"name": "Create Task — Sync (Welcome Email)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// set execution_time to 2 minutes from now",
+									"const t = new Date(Date.now() + 2 * 60 * 1000);",
+									"pm.variables.set('execution_time', t.toISOString());"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const body = pm.response.json();",
+									"    pm.collectionVariables.set('task_id', body.id);",
+									"    pm.test('status is CREATED', () => pm.expect(body.status).to.equal('CREATED'));",
+									"    pm.test('id saved to task_id', () => pm.expect(body.id).to.be.a('string'));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
 						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Send Welcome Email\",\n  \"execution_time\": \"{{execution_time}}\",\n  \"webhook_url\": \"http://executor:8090/send-welcome\",\n  \"payload\": {\n    \"email\": \"newuser@example.com\",\n    \"template\": \"welcome\"\n  },\n  \"recurrence\": \"NONE\",\n  \"max_retries\": 3\n}",
+							"options": {"raw": {"language": "json"}}
+						},
+						"url": {
+							"raw": "{{SCHEDULER_URL}}/tasks",
+							"host": ["{{SCHEDULER_URL}}"],
+							"path": ["tasks"]
+						},
+						"description": "Creates a one-shot task. At `execution_time` the scheduler POSTs to `/send-welcome` (sync — returns 200 immediately). The pre-request script sets `execution_time` to now + 2 min. The test script captures the returned `id` into `task_id`.\n\n**Task lifecycle:** `CREATED → PENDING → RUNNING → SUCCESS`"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Task — Async (Notify Admin)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"const t = new Date(Date.now() + 2 * 60 * 1000);",
+									"pm.variables.set('execution_time', t.toISOString());"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const body = pm.response.json();",
+									"    pm.collectionVariables.set('task_id', body.id);",
+									"    pm.test('status is CREATED', () => pm.expect(body.status).to.equal('CREATED'));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Notify Admin on New Signup\",\n  \"execution_time\": \"{{execution_time}}\",\n  \"webhook_url\": \"http://executor:8090/notify-admin\",\n  \"payload\": {\n    \"user\": \"newuser@example.com\"\n  },\n  \"recurrence\": \"NONE\",\n  \"max_retries\": 3\n}",
+							"options": {"raw": {"language": "json"}}
+						},
+						"url": {
+							"raw": "{{SCHEDULER_URL}}/tasks",
+							"host": ["{{SCHEDULER_URL}}"],
+							"path": ["tasks"]
+						},
+						"description": "Creates a task that hits an async endpoint. At `execution_time` the scheduler POSTs to `/notify-admin` which returns `202` with a `check_url`. The scheduler then polls `check_url` every 5 s until `COMPLETED` or `FAILED`.\n\n**Task lifecycle:** `CREATED → PENDING → RUNNING → SUCCESS` (via polling)"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Task — Recurring Daily (Daily Report)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"const t = new Date(Date.now() + 2 * 60 * 1000);",
+									"pm.variables.set('execution_time', t.toISOString());"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const body = pm.response.json();",
+									"    pm.collectionVariables.set('task_id', body.id);",
+									"    pm.test('recurrence is DAILY', () => pm.expect(body.recurrence).to.equal('DAILY'));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Daily Summary Report\",\n  \"execution_time\": \"{{execution_time}}\",\n  \"webhook_url\": \"http://executor:8090/daily-report\",\n  \"payload\": {},\n  \"recurrence\": \"DAILY\",\n  \"max_retries\": 3\n}",
+							"options": {"raw": {"language": "json"}}
+						},
+						"url": {
+							"raw": "{{SCHEDULER_URL}}/tasks",
+							"host": ["{{SCHEDULER_URL}}"],
+							"path": ["tasks"]
+						},
+						"description": "Creates a recurring task with `recurrence: DAILY`. After each successful execution the scheduler automatically clones it with `execution_time + 24h` and schedules the next run. Each run creates a new task row with `parent_task_id` pointing to its predecessor."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Task — Recurring Hourly (Security Alert)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"const t = new Date(Date.now() + 2 * 60 * 1000);",
+									"pm.variables.set('execution_time', t.toISOString());"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const body = pm.response.json();",
+									"    pm.collectionVariables.set('task_id', body.id);",
+									"    pm.test('recurrence is HOURLY', () => pm.expect(body.recurrence).to.equal('HOURLY'));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Security Alert Notification\",\n  \"execution_time\": \"{{execution_time}}\",\n  \"webhook_url\": \"http://executor:8090/security-alert\",\n  \"payload\": {\n    \"severity\": \"high\"\n  },\n  \"recurrence\": \"HOURLY\",\n  \"max_retries\": 3\n}",
+							"options": {"raw": {"language": "json"}}
+						},
+						"url": {
+							"raw": "{{SCHEDULER_URL}}/tasks",
+							"host": ["{{SCHEDULER_URL}}"],
+							"path": ["tasks"]
+						},
+						"description": "Creates a recurring task with `recurrence: HOURLY`. After each successful execution the scheduler clones it with `execution_time + 1h`."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Task — Custom Cron",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"const t = new Date(Date.now() + 2 * 60 * 1000);",
+									"pm.variables.set('execution_time', t.toISOString());"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const body = pm.response.json();",
+									"    pm.collectionVariables.set('task_id', body.id);",
+									"    pm.test('recurrence is CUSTOM_CRON', () => pm.expect(body.recurrence).to.equal('CUSTOM_CRON'));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Every 30 Minutes Report\",\n  \"execution_time\": \"{{execution_time}}\",\n  \"webhook_url\": \"http://executor:8090/daily-report\",\n  \"payload\": {},\n  \"recurrence\": \"CUSTOM_CRON\",\n  \"cron_expression\": \"*/30 * * * *\",\n  \"max_retries\": 2\n}",
+							"options": {"raw": {"language": "json"}}
+						},
+						"url": {
+							"raw": "{{SCHEDULER_URL}}/tasks",
+							"host": ["{{SCHEDULER_URL}}"],
+							"path": ["tasks"]
+						},
+						"description": "Creates a recurring task with `recurrence: CUSTOM_CRON`. The `cron_expression` follows standard 5-field cron syntax and is parsed by croniter to compute the next run time after each success.\n\n`cron_expression` is **required** when `recurrence` is `CUSTOM_CRON` and **forbidden** for all other recurrence types."
+					},
+					"response": []
+				},
+				{
+					"name": "List All Tasks",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{SCHEDULER_URL}}/tasks?limit=50&offset=0",
+							"host": ["{{SCHEDULER_URL}}"],
+							"path": ["tasks"],
+							"query": [
+								{"key": "limit",  "value": "50",  "description": "Max results (1–200, default 50)"},
+								{"key": "offset", "value": "0",   "description": "Number of results to skip"}
+							]
+						},
+						"description": "Returns all tasks ordered by creation time (newest first). Paginate with `limit` and `offset`."
+					},
+					"response": []
+				},
+				{
+					"name": "List Tasks by Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{SCHEDULER_URL}}/tasks?status=CREATED&limit=50&offset=0",
+							"host": ["{{SCHEDULER_URL}}"],
+							"path": ["tasks"],
+							"query": [
+								{
+									"key": "status",
+									"value": "CREATED",
+									"description": "Filter by status: CREATED | PENDING | RUNNING | RETRYING | SUCCESS | FAILED | CANCELLED"
+								},
+								{"key": "limit",  "value": "50", "description": "Max results (1–200, default 50)"},
+								{"key": "offset", "value": "0",  "description": "Number of results to skip"}
+							]
+						},
+						"description": "Filter tasks by status. Valid values: `CREATED`, `PENDING`, `RUNNING`, `RETRYING`, `SUCCESS`, `FAILED`, `CANCELLED`."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Task Detail (with Attempt History)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{SCHEDULER_URL}}/tasks/{{task_id}}",
+							"host": ["{{SCHEDULER_URL}}"],
+							"path": ["tasks", "{{task_id}}"]
+						},
+						"description": "Returns the task plus every attempt recorded in the `attempts` array — use this to inspect retry history, per-attempt HTTP status, duration, and response body.\n\nUses `task_id` captured from a previous `POST /tasks` response."
+					},
+					"response": []
+				},
+				{
+					"name": "Cancel Task",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"url": {
+							"raw": "{{SCHEDULER_URL}}/tasks/{{task_id}}/cancel",
+							"host": ["{{SCHEDULER_URL}}"],
+							"path": ["tasks", "{{task_id}}", "cancel"]
+						},
+						"description": "Moves the task to `CANCELLED` and removes it from the scheduler.\n\nOnly allowed from `CREATED` or `PENDING`. Returns `409 Conflict` if the task is already `RUNNING`, `RETRYING`, `SUCCESS`, `FAILED`, or `CANCELLED`.\n\nUses `task_id` captured from a previous `POST /tasks` response."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Executor — Webhooks (Direct)",
+			"description": "These endpoints are normally called by the Scheduler automatically at the task's `execution_time`. You can also call them directly for testing.\n\n**Request body:** `{ task_id, attempt_id, payload }` — use any valid UUIDs for manual tests.",
+			"item": [
+				{
+					"name": "Send Welcome Email (Sync 200)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('status 200', () => pm.response.to.have.status(200));",
+									"pm.test('execution COMPLETED', () => {",
+									"    const body = pm.response.json();",
+									"    pm.expect(body.status).to.equal('COMPLETED');",
+									"    pm.collectionVariables.set('execution_id', body.execution_id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"task_id\": \"00000000-0000-0000-0000-000000000001\",\n  \"attempt_id\": \"00000000-0000-0000-0000-000000000002\",\n  \"payload\": {\n    \"email\": \"newuser@example.com\",\n    \"template\": \"welcome\"\n  }\n}",
+							"options": {"raw": {"language": "json"}}
+						},
+						"url": {
+							"raw": "{{EXECUTOR_URL}}/send-welcome",
+							"host": ["{{EXECUTOR_URL}}"],
+							"path": ["send-welcome"]
+						},
+						"description": "**Sync — returns 200 immediately.**\n\nSimulates sending a welcome email. Execution is recorded in the Executor DB and `status` is `COMPLETED` by the time the response is returned.\n\n**Payload fields:**\n- `email` — recipient address\n- `template` — template name (falls back to `\"welcome\"`)"
+					},
+					"response": []
+				},
+				{
+					"name": "Security Alert (Sync 200)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('status 200', () => pm.response.to.have.status(200));",
+									"pm.test('execution COMPLETED', () => {",
+									"    const body = pm.response.json();",
+									"    pm.expect(body.status).to.equal('COMPLETED');",
+									"    pm.collectionVariables.set('execution_id', body.execution_id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"task_id\": \"00000000-0000-0000-0000-000000000001\",\n  \"attempt_id\": \"00000000-0000-0000-0000-000000000002\",\n  \"payload\": {\n    \"severity\": \"high\"\n  }\n}",
+							"options": {"raw": {"language": "json"}}
+						},
+						"url": {
+							"raw": "{{EXECUTOR_URL}}/security-alert",
+							"host": ["{{EXECUTOR_URL}}"],
+							"path": ["security-alert"]
+						},
+						"description": "**Sync — returns 200 immediately.**\n\nSimulates dispatching a security alert to Slack and email. Execution is recorded and `status` is `COMPLETED` by the time the response is returned.\n\n**Payload fields:**\n- `severity` — `\"low\"`, `\"medium\"`, or `\"high\"` (falls back to `\"medium\"`)"
+					},
+					"response": []
+				},
+				{
+					"name": "Notify Admin (Async 202)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('status 202', () => pm.response.to.have.status(202));",
+									"pm.test('check_url present', () => {",
+									"    const body = pm.response.json();",
+									"    pm.expect(body.check_url).to.be.a('string');",
+									"    pm.expect(body.status).to.equal('QUEUED');",
+									"    // extract execution_id from check_url: .../status/<id>",
+									"    const id = body.check_url.split('/').pop();",
+									"    pm.collectionVariables.set('execution_id', id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"task_id\": \"00000000-0000-0000-0000-000000000001\",\n  \"attempt_id\": \"00000000-0000-0000-0000-000000000002\",\n  \"payload\": {\n    \"user\": \"newuser@example.com\"\n  }\n}",
+							"options": {"raw": {"language": "json"}}
+						},
+						"url": {
+							"raw": "{{EXECUTOR_URL}}/notify-admin",
+							"host": ["{{EXECUTOR_URL}}"],
+							"path": ["notify-admin"]
+						},
+						"description": "**Async — returns 202 immediately, processes in background (~3 s).**\n\nSimulates notifying the admin dashboard when a new user signs up. The response body includes a `check_url` — poll `GET /status/{execution_id}` until `status` is `COMPLETED` or `FAILED`.\n\nThe test script extracts the `execution_id` from the `check_url` and saves it to the collection variable.\n\n**Payload fields:**\n- `user` — username or email of the new signup"
+					},
+					"response": []
+				},
+				{
+					"name": "Daily Report (Async 202)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('status 202', () => pm.response.to.have.status(202));",
+									"pm.test('check_url present', () => {",
+									"    const body = pm.response.json();",
+									"    pm.expect(body.check_url).to.be.a('string');",
+									"    pm.expect(body.status).to.equal('QUEUED');",
+									"    const id = body.check_url.split('/').pop();",
+									"    pm.collectionVariables.set('execution_id', id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"task_id\": \"00000000-0000-0000-0000-000000000001\",\n  \"attempt_id\": \"00000000-0000-0000-0000-000000000002\",\n  \"payload\": {}\n}",
+							"options": {"raw": {"language": "json"}}
+						},
+						"url": {
+							"raw": "{{EXECUTOR_URL}}/daily-report",
+							"host": ["{{EXECUTOR_URL}}"],
+							"path": ["daily-report"]
+						},
+						"description": "**Async — returns 202 immediately, processes in background (~5 s).**\n\nSimulates generating the daily summary report. The response body includes a `check_url` — poll `GET /status/{execution_id}` until `status` is `COMPLETED` or `FAILED`.\n\nThe test script extracts the `execution_id` from the `check_url` and saves it to the collection variable.\n\nNo special payload fields required."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Executor — Execution Status",
+			"item": [
+				{
+					"name": "Poll Execution Status",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('status 200', () => pm.response.to.have.status(200));",
+									"const body = pm.response.json();",
+									"pm.test('status field present', () => {",
+									"    pm.expect(['RECEIVED','PROCESSING','COMPLETED','FAILED']).to.include(body.status);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{EXECUTOR_URL}}/status/{{execution_id}}",
+							"host": ["{{EXECUTOR_URL}}"],
+							"path": ["status", "{{execution_id}}"]
+						},
+						"description": "Poll the execution status of an async webhook call.\n\nUses `execution_id` captured from a previous `POST /notify-admin` or `POST /daily-report` response.\n\n**Status values:**\n| Status | Meaning |\n|---|---|\n| `RECEIVED` | Record created, background task not yet started |\n| `PROCESSING` | Background task is actively running |\n| `COMPLETED` | Finished successfully — `result` field is populated |\n| `FAILED` | Errored or timed out — `error_message` field is populated |\n\nStop polling when `COMPLETED` or `FAILED` is returned."
 					},
 					"response": []
 				}
@@ -36,31 +546,39 @@
 			"listen": "prerequest",
 			"script": {
 				"type": "text/javascript",
-				"requests": {},
-				"exec": [
-					""
-				]
+				"exec": [""]
 			}
 		},
 		{
 			"listen": "test",
 			"script": {
 				"type": "text/javascript",
-				"requests": {},
-				"exec": [
-					""
-				]
+				"exec": [""]
 			}
 		}
 	],
 	"variable": [
 		{
-			"key": "EXECUTOR_URL",
-			"value": ""
+			"key": "SCHEDULER_URL",
+			"value": "http://localhost:8080",
+			"type": "string"
 		},
 		{
-			"key": "SCHEDULAR_URL",
-			"value": ""
+			"key": "EXECUTOR_URL",
+			"value": "http://localhost:8090",
+			"type": "string"
+		},
+		{
+			"key": "task_id",
+			"value": "",
+			"type": "string",
+			"description": "Auto-set by POST /tasks test scripts"
+		},
+		{
+			"key": "execution_id",
+			"value": "",
+			"type": "string",
+			"description": "Auto-set by async webhook (202) test scripts"
 		}
 	]
 }

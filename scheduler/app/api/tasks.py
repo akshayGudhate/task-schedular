@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Annotated, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Query, status
@@ -54,9 +54,9 @@ async def create_task(body: TaskCreate) -> TaskResponse:
     description="Returns all tasks ordered by creation time (newest first). Filter by `status` and paginate with `limit` / `offset`.",
 )
 async def list_tasks(
-    status: Optional[TaskStatus] = Query(None, description="Filter by task status"),
-    limit:  int = Query(50, ge=1, le=200, description="Max results to return"),
-    offset: int = Query(0,  ge=0,         description="Number of results to skip"),
+    status: Annotated[Optional[TaskStatus], Query(description="Filter by task status")] = None,
+    limit:  Annotated[int, Query(ge=1, le=200, description="Max results to return")] = 50,
+    offset: Annotated[int, Query(ge=0, description="Number of results to skip")] = 0,
 ) -> list[TaskResponse]:
     return await svc.list_tasks(status=status, limit=limit, offset=offset)
 

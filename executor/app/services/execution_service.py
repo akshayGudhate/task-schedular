@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 from uuid import UUID
 
 import asyncpg
@@ -16,7 +17,7 @@ def _to_status_response(row: asyncpg.Record) -> StatusResponse:
     if row["response_body"]:
         try:
             result = json.loads(row["response_body"])
-        except Exception:
+        except json.JSONDecodeError:
             result = {"raw": row["response_body"]}
     return StatusResponse(
         id=str(row["id"]),
@@ -35,7 +36,7 @@ async def create_execution(
     task_id: UUID,
     attempt_id: UUID,
     webhook_url: str,
-    payload: dict,
+    payload: dict[str, Any],
 ) -> UUID:
     async with get_connection() as conn:
         row = await conn.fetchrow(
@@ -61,7 +62,7 @@ async def mark_processing(execution_id: UUID) -> None:
         )
 
 
-async def complete(execution_id: UUID, result: dict, duration_ms: int) -> None:
+async def complete(execution_id: UUID, result: dict[str, Any], duration_ms: int) -> None:
     async with get_connection() as conn:
         await conn.execute(
             """

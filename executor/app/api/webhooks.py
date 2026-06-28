@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -16,7 +17,8 @@ log = structlog.get_logger()
 _404 = {status.HTTP_404_NOT_FOUND: {"description": "Execution record not found"}}
 
 
-async def _run_async(execution_id: UUID, delay: float, result: dict) -> None:
+async def _run_async(execution_id: UUID, delay: float, result: dict[str, Any]) -> None:
+    # runs in a FastAPI BackgroundTask so the 202 response is sent before processing starts
     start = time.perf_counter()
     try:
         await svc.mark_processing(execution_id)
@@ -26,7 +28,9 @@ async def _run_async(execution_id: UUID, delay: float, result: dict) -> None:
         log.info("execution.completed", execution_id=str(execution_id))
     except Exception:
         duration_ms = int((time.perf_counter() - start) * 1000)
-        await svc.fail(execution_id, "unexpected error during async processing", duration_ms)
+        await svc.fail(
+            execution_id, "unexpected error during async processing", duration_ms
+        )
         log.error("execution.failed", execution_id=str(execution_id), exc_info=True)
 
 
@@ -48,7 +52,10 @@ Simulates sending a welcome email to a new user. Execution is recorded in the DB
 async def send_welcome(body: ExecutionRequest, request: Request) -> WebhookResponse:
     start = time.perf_counter()
     exec_id = await svc.create_execution(
-        body.task_id, body.attempt_id, str(request.url), body.payload,
+        body.task_id,
+        body.attempt_id,
+        str(request.url),
+        body.payload,
     )
     await svc.mark_processing(exec_id)
     result = {
@@ -79,7 +86,10 @@ Simulates dispatching a security alert to Slack and email. Execution is recorded
 async def security_alert(body: ExecutionRequest, request: Request) -> WebhookResponse:
     start = time.perf_counter()
     exec_id = await svc.create_execution(
-        body.task_id, body.attempt_id, str(request.url), body.payload,
+        body.task_id,
+        body.attempt_id,
+        str(request.url),
+        body.payload,
     )
     await svc.mark_processing(exec_id)
     result = {
@@ -115,7 +125,10 @@ async def notify_admin(
     background_tasks: BackgroundTasks,
 ) -> WebhookResponse:
     exec_id = await svc.create_execution(
-        body.task_id, body.attempt_id, str(request.url), body.payload,
+        body.task_id,
+        body.attempt_id,
+        str(request.url),
+        body.payload,
     )
     result = {
         "notification_sent": True,
@@ -125,7 +138,9 @@ async def notify_admin(
     background_tasks.add_task(_run_async, exec_id, 3.0, result)
     check_url = f"{request.base_url}status/{exec_id}"
     log.info("webhook.notify_admin.queued", execution_id=str(exec_id))
-    return WebhookResponse(execution_id=str(exec_id), status="QUEUED", check_url=check_url)
+    return WebhookResponse(
+        execution_id=str(exec_id), status="QUEUED", check_url=check_url
+    )
 
 
 @router.post(
@@ -148,7 +163,10 @@ async def daily_report(
     background_tasks: BackgroundTasks,
 ) -> WebhookResponse:
     exec_id = await svc.create_execution(
-        body.task_id, body.attempt_id, str(request.url), body.payload,
+        body.task_id,
+        body.attempt_id,
+        str(request.url),
+        body.payload,
     )
     result = {
         "report_generated": True,
@@ -158,4 +176,6 @@ async def daily_report(
     background_tasks.add_task(_run_async, exec_id, 5.0, result)
     check_url = f"{request.base_url}status/{exec_id}"
     log.info("webhook.daily_report.queued", execution_id=str(exec_id))
-    return WebhookResponse(execution_id=str(exec_id), status="QUEUED", check_url=check_url)
+    return WebhookResponse(
+        execution_id=str(exec_id), status="QUEUED", check_url=check_url
+    )
