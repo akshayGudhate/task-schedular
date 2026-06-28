@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
-import pytest
+import pytest  # pyright: ignore[reportMissingImports]
 from httpx import ASGITransport, AsyncClient
 
 # must be set before app modules are imported so get_settings() (lru_cached) reads them

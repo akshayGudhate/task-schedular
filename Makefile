@@ -5,7 +5,19 @@ export
 SCHEDULER_PORT ?= 8080
 EXECUTOR_PORT ?= 8090
 
-.PHONY: install dev dev-scheduler dev-executor start start-scheduler start-executor stop db db-stop db-logs docker-up docker-down docker-build docker-logs migrate migrate-scheduler migrate-executor migrate-down migrate-status
+.PHONY: install dev dev-scheduler dev-executor start start-scheduler start-executor stop db db-stop db-logs docker-up docker-down docker-build docker-logs migrate migrate-scheduler migrate-executor migrate-down migrate-status test test-scheduler test-executor
+
+# ─── Tests ─── #
+
+test-scheduler:
+	cd scheduler && source .venv/bin/activate && python -m pytest tests/ -v
+
+test-executor:
+	cd executor && source .venv/bin/activate && python -m pytest tests/ -v
+
+test:
+	cd scheduler && source .venv/bin/activate && python -m pytest tests/ -v
+	cd executor && source .venv/bin/activate && python -m pytest tests/ -v
 
 # ─── Local Dev ─── #
 

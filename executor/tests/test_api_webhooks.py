@@ -7,9 +7,6 @@ The `client` fixture comes from conftest.py.
 
 import uuid
 from unittest.mock import AsyncMock, patch
-
-import pytest
-
 from app.core.errors import NotFoundError
 from app.models.execution import ExecutionStatus
 from tests.conftest import make_status_response

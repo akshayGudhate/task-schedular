@@ -8,8 +8,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
-import pytest
-
 from app.core.errors import InvalidTransitionError, NotFoundError
 from app.models.task import RecurrenceType, TaskStatus
 from tests.conftest import make_detail, make_task

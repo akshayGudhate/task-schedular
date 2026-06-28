@@ -2,7 +2,7 @@
 
 import uuid
 
-import pytest
+import pytest  # pyright: ignore[reportMissingImports]
 from pydantic import ValidationError
 
 from app.models.execution import ExecutionRequest, ExecutionStatus, WebhookResponse

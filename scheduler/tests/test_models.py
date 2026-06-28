@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-import pytest
+import pytest  # pyright: ignore[reportMissingImports]
 from pydantic import ValidationError
 
 from app.models.task import RecurrenceType, TaskCreate
