@@ -16,7 +16,9 @@ _pool: Optional[asyncpg.Pool] = None
 def get_pool() -> asyncpg.Pool:
     # mirrors get_settings() — fails fast if create_pool() wasn't called in lifespan
     if _pool is None:
-        raise RuntimeError("db pool not initialized — call create_pool() in lifespan first")
+        raise RuntimeError(
+            "db pool not initialized — call create_pool() in lifespan first"
+        )
     return _pool
 
 

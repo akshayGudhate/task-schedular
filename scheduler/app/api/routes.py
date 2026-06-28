@@ -15,5 +15,6 @@ router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 )
 def health():
     from app.core.config import get_settings
+
     s = get_settings()
     return {"status": "ok", "service": s.APP_NAME, "version": s.APP_VERSION}

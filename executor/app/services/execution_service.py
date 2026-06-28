@@ -46,32 +46,56 @@ async def create_execution(
             ON CONFLICT (attempt_id) DO NOTHING
             RETURNING id
             """,
-            task_id, attempt_id, webhook_url, json.dumps(payload),
+            task_id,
+            attempt_id,
+            webhook_url,
+            json.dumps(payload),
         )
         if row:
             return row["id"]
         # duplicate attempt_id from a scheduler retry — return the existing execution id
-        return await conn.fetchval("SELECT id FROM executions WHERE attempt_id = $1", attempt_id)
+        return await conn.fetchval(
+            """
+            SELECT id
+            FROM executions
+            WHERE attempt_id = $1
+            """,
+            attempt_id,
+        )
 
 
 async def mark_processing(execution_id: UUID) -> None:
     async with get_connection() as conn:
         await conn.execute(
-            "UPDATE executions SET status = 'PROCESSING', updated_at = NOW() WHERE id = $1",
+            """
+            UPDATE executions
+            SET status = 'PROCESSING', updated_at = NOW()
+            WHERE id = $1
+            """,
             execution_id,
         )
 
 
-async def complete(execution_id: UUID, result: dict[str, Any], duration_ms: int) -> None:
+async def complete(
+    execution_id: UUID, result: dict[str, Any], duration_ms: int
+) -> None:
     async with get_connection() as conn:
         await conn.execute(
             """
             UPDATE executions
-            SET status = 'COMPLETED', http_status = $4, completed_at = NOW(),
-                response_body = $2, duration_ms = $3, updated_at = NOW()
+            SET
+                status = 'COMPLETED',
+                response_body = $2,
+                duration_ms = $3,
+                http_status = $4,
+                completed_at = NOW(),
+                updated_at = NOW()
             WHERE id = $1
             """,
-            execution_id, json.dumps(result), duration_ms, status.HTTP_200_OK,
+            execution_id,
+            json.dumps(result),
+            duration_ms,
+            status.HTTP_200_OK,
         )
 
 
@@ -80,17 +104,30 @@ async def fail(execution_id: UUID, error: str, duration_ms: int) -> None:
         await conn.execute(
             """
             UPDATE executions
-            SET status = 'FAILED', completed_at = NOW(),
-                error_message = $2, duration_ms = $3, updated_at = NOW()
+            SET
+                status = 'FAILED',
+                error_message = $2,
+                duration_ms = $3,
+                completed_at = NOW(),
+                updated_at = NOW()
             WHERE id = $1
             """,
-            execution_id, error, duration_ms,
+            execution_id,
+            error,
+            duration_ms,
         )
 
 
 async def get_execution(execution_id: UUID) -> StatusResponse:
     async with get_connection() as conn:
-        row = await conn.fetchrow("SELECT * FROM executions WHERE id = $1", execution_id)
+        row = await conn.fetchrow(
+            """
+            SELECT *
+            FROM executions
+            WHERE id = $1
+            """,
+            execution_id,
+        )
     if not row:
         raise NotFoundError(f"execution {execution_id} not found")
     return _to_status_response(row)

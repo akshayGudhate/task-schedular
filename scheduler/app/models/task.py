@@ -8,36 +8,38 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class TaskStatus(str, Enum):
-    CREATED   = "CREATED"    # just landed in the db, waiting for its scheduled time
-    PENDING   = "PENDING"    # picked up by the scheduler, about to fire
-    RUNNING   = "RUNNING"    # webhook is in-flight (or being polled for async tasks)
-    RETRYING  = "RETRYING"   # failed but has retries left — sitting out the backoff delay
-    SUCCESS   = "SUCCESS"    # got a clean 2xx, we're done
-    FAILED    = "FAILED"     # exhausted all retries, giving up
+    CREATED = "CREATED"  # just landed in the db, waiting for its scheduled time
+    PENDING = "PENDING"  # picked up by the scheduler, about to fire
+    RUNNING = "RUNNING"  # webhook is in-flight (or being polled for async tasks)
+    RETRYING = "RETRYING"  # failed but has retries left — sitting out the backoff delay
+    SUCCESS = "SUCCESS"  # got a clean 2xx, we're done
+    FAILED = "FAILED"  # exhausted all retries, giving up
     CANCELLED = "CANCELLED"  # user killed it before it ever ran
 
 
 class RecurrenceType(str, Enum):
-    NONE        = "NONE"         # one-shot, fire and forget
-    HOURLY      = "HOURLY"       # reschedule every hour after success
-    DAILY       = "DAILY"        # reschedule every day after success
-    CUSTOM_CRON = "CUSTOM_CRON"  # uses cron_expression — next run computed via CronTrigger
+    NONE = "NONE"  # one-shot, fire and forget
+    HOURLY = "HOURLY"  # reschedule every hour after success
+    DAILY = "DAILY"  # reschedule every day after success
+    CUSTOM_CRON = (
+        "CUSTOM_CRON"  # uses cron_expression — next run computed via CronTrigger
+    )
 
 
 class AttemptStatus(str, Enum):
     RUNNING = "RUNNING"  # http request is in-flight
     SUCCESS = "SUCCESS"  # got a clean 2xx response
-    FAILED  = "FAILED"   # non-2xx, timeout, or connection error
+    FAILED = "FAILED"  # non-2xx, timeout, or connection error
 
 
 class TaskCreate(BaseModel):
-    name:            str
-    execution_time:  datetime
-    webhook_url:     str
-    payload:         dict[str, Any] = Field(default_factory=dict)
-    recurrence:      RecurrenceType = RecurrenceType.NONE
-    cron_expression: Optional[str]  = None
-    max_retries:     int            = Field(default=3, ge=0)
+    name: str
+    execution_time: datetime
+    webhook_url: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    recurrence: RecurrenceType = RecurrenceType.NONE
+    cron_expression: Optional[str] = None
+    max_retries: int = Field(default=3, ge=0)
 
     @field_validator("name")
     @classmethod
@@ -66,36 +68,38 @@ class TaskCreate(BaseModel):
         if self.recurrence == RecurrenceType.CUSTOM_CRON and not self.cron_expression:
             raise ValueError("cron_expression required when recurrence is CUSTOM_CRON")
         if self.recurrence != RecurrenceType.CUSTOM_CRON and self.cron_expression:
-            raise ValueError("cron_expression only allowed when recurrence is CUSTOM_CRON")
+            raise ValueError(
+                "cron_expression only allowed when recurrence is CUSTOM_CRON"
+            )
         return self
 
 
 class TaskAttemptResponse(BaseModel):
-    id:             str
+    id: str
     attempt_number: int
-    started_at:     datetime
-    completed_at:   Optional[datetime]
-    http_status:    Optional[int]
-    response_body:  Optional[str]
-    duration_ms:    Optional[int]
-    status:         AttemptStatus
-    error_message:  Optional[str]
+    started_at: datetime
+    completed_at: Optional[datetime]
+    http_status: Optional[int]
+    response_body: Optional[str]
+    duration_ms: Optional[int]
+    status: AttemptStatus
+    error_message: Optional[str]
 
 
 class TaskResponse(BaseModel):
-    id:              str
-    name:            str
-    execution_time:  datetime
-    webhook_url:     str
-    payload:         dict
-    recurrence:      RecurrenceType
+    id: str
+    name: str
+    execution_time: datetime
+    webhook_url: str
+    payload: dict
+    recurrence: RecurrenceType
     cron_expression: Optional[str]
-    status:          TaskStatus
-    max_retries:     int
-    retry_count:     int
-    parent_task_id:  Optional[str]
-    created_at:      datetime
-    updated_at:      datetime
+    status: TaskStatus
+    max_retries: int
+    retry_count: int
+    parent_task_id: Optional[str]
+    created_at: datetime
+    updated_at: datetime
 
 
 class TaskDetailResponse(TaskResponse):

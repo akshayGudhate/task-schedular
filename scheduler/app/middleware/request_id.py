@@ -16,7 +16,9 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
         request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
         start = time.perf_counter()
 
-        with structlog.contextvars.bound_contextvars(request_id=request_id):  # auto-clears on block exit
+        with structlog.contextvars.bound_contextvars(
+            request_id=request_id
+        ):  # auto-clears on block exit
             response = await call_next(request)
             duration_ms = round((time.perf_counter() - start) * 1000)
 

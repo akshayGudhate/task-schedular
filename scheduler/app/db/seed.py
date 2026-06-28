@@ -13,32 +13,32 @@ log = structlog.get_logger()
 # staggered so all 4 fire within the first 2 minutes — easy to demo end-to-end
 _TASKS = [
     {
-        "name":        "Send Welcome Email",
+        "name": "Send Welcome Email",
         "webhook_url": "http://executor:8090/send-welcome",
-        "payload":     {"email": "newuser@example.com", "template": "welcome"},
-        "recurrence":  RecurrenceType.NONE.value,
-        "delay_s":     30,
+        "payload": {"email": "newuser@example.com", "template": "welcome"},
+        "recurrence": RecurrenceType.NONE.value,
+        "delay_s": 30,
     },
     {
-        "name":        "Notify Admin on New Signup",
+        "name": "Notify Admin on New Signup",
         "webhook_url": "http://executor:8090/notify-admin",
-        "payload":     {"user": "newuser@example.com"},
-        "recurrence":  RecurrenceType.NONE.value,
-        "delay_s":     60,
+        "payload": {"user": "newuser@example.com"},
+        "recurrence": RecurrenceType.NONE.value,
+        "delay_s": 60,
     },
     {
-        "name":        "Daily Summary Report",
+        "name": "Daily Summary Report",
         "webhook_url": "http://executor:8090/daily-report",
-        "payload":     {},
-        "recurrence":  RecurrenceType.DAILY.value,
-        "delay_s":     90,
+        "payload": {},
+        "recurrence": RecurrenceType.DAILY.value,
+        "delay_s": 90,
     },
     {
-        "name":        "Security Alert Notification",
+        "name": "Security Alert Notification",
         "webhook_url": "http://executor:8090/security-alert",
-        "payload":     {"severity": "high"},
-        "recurrence":  RecurrenceType.NONE.value,
-        "delay_s":     120,
+        "payload": {"severity": "high"},
+        "recurrence": RecurrenceType.NONE.value,
+        "delay_s": 120,
     },
 ]
 

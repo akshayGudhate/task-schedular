@@ -10,7 +10,7 @@ log = structlog.get_logger()
 class AppError(Exception):
     # base for all domain errors — subclass to set status_code and error_code
     status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR
-    error_code:  str = "INTERNAL_ERROR"
+    error_code: str = "INTERNAL_ERROR"
 
     def __init__(self, message: str) -> None:
         self.message = message
@@ -19,7 +19,7 @@ class AppError(Exception):
 
 class NotFoundError(AppError):
     status_code = status.HTTP_404_NOT_FOUND
-    error_code  = "NOT_FOUND"
+    error_code = "NOT_FOUND"
 
 
 def _error_body(message: str, error_code: str) -> dict[str, str]:
@@ -54,5 +54,5 @@ async def _unhandled_error_handler(request: Request, exc: Exception) -> JSONResp
 
 
 def register_error_handlers(app: FastAPI) -> None:
-    app.add_exception_handler(AppError, _app_error_handler)          # type: ignore[arg-type]
-    app.add_exception_handler(Exception, _unhandled_error_handler)   # type: ignore[arg-type]
+    app.add_exception_handler(AppError, _app_error_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(Exception, _unhandled_error_handler)  # type: ignore[arg-type]

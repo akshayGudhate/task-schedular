@@ -8,9 +8,9 @@ class Settings(BaseSettings):
     # required — pydantic raises ValidationError on startup if these are missing
     EXECUTOR_DB_URL: str
 
-    APP_NAME:    str  = "Task Executor"
-    APP_VERSION: str  = "1.0.0"
-    DEBUG:       bool = False
+    APP_NAME: str = "Task Executor"
+    APP_VERSION: str = "1.0.0"
+    DEBUG: bool = False
 
     EXECUTOR_HOST: str = "0.0.0.0"
     EXECUTOR_PORT: int = 8090

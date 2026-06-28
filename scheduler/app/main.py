@@ -63,7 +63,7 @@ On first startup, 4 sample tasks are pre-loaded and fire within 2 minutes:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await create_pool()
-    await seed()           # inserts 4 sample tasks on first startup; no-op if data already exists
+    await seed()  # inserts 4 sample tasks on first startup; no-op if data already exists
     await job_runner.start()
     log.info("scheduler.starting", version=settings.APP_VERSION)
     yield

@@ -7,7 +7,9 @@ from typing import Any
 import structlog
 
 
-def _add_service_name(logger: object, method: str, event_dict: dict[str, Any]) -> dict[str, Any]:
+def _add_service_name(
+    logger: object, method: str, event_dict: dict[str, Any]
+) -> dict[str, Any]:
     # needed when multiple services share a log aggregator
     event_dict["service"] = "scheduler"
     return event_dict
@@ -24,9 +26,11 @@ def setup_logging(debug: bool = False) -> None:
     ]
 
     if debug:
-        renderer = structlog.dev.ConsoleRenderer()      # human-readable for local dev
+        renderer = structlog.dev.ConsoleRenderer()  # human-readable for local dev
     else:
-        renderer = structlog.processors.JSONRenderer()  # structured JSON for prod aggregators
+        renderer = (
+            structlog.processors.JSONRenderer()
+        )  # structured JSON for prod aggregators
 
     structlog.configure(
         processors=[*shared_processors, renderer],
