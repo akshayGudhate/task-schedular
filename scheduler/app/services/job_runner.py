@@ -18,8 +18,8 @@ from app.services import task_service
 
 log = structlog.get_logger()
 
-_scheduler: Optional[AsyncIOScheduler] = None
-_client: Optional[httpx.AsyncClient] = None
+_scheduler: Optional[AsyncIOScheduler] = None  # process-level singleton — shared by schedule_task() and fire_webhook()
+_client: Optional[httpx.AsyncClient] = None  # shared so all webhook calls reuse TCP connections
 
 
 def get_scheduler() -> AsyncIOScheduler:
@@ -43,7 +43,7 @@ async def start() -> None:
     )  # one client, reuses connections across all webhook calls
     _scheduler = AsyncIOScheduler()
     _scheduler.start()
-    await task_service.recover_running_tasks()  # fix any tasks left RUNNING from a previous crash
+    await task_service.recover_running_tasks()  # fix any tasks left RUNNING from a previous crash — must run before _reload_pending
     await _reload_pending()
     log.info("job_runner.started")
 
@@ -67,7 +67,7 @@ def schedule_task(task_id: UUID, execution_time: datetime) -> None:
         args=[task_id],
         id=str(task_id),
         replace_existing=True,  # idempotent — safe to call on restart, won't double-schedule
-        misfire_grace_time=settings.MISFIRE_GRACE_TIME_SECONDS,
+        misfire_grace_time=settings.MISFIRE_GRACE_TIME_SECONDS,  # fires late jobs within this window instead of skipping them
     )
     log.info("task.scheduled", task_id=str(task_id), run_at=execution_time.isoformat())
 

@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # required — pydantic raises ValidationError on startup if these are missing
+    # no default = pydantic raises ValidationError at import time — fail loudly rather than silently at first use
     SCHEDULER_DB_URL: str
     EXECUTOR_BASE_URL: str  # e.g. http://executor:8090
 
@@ -31,6 +31,6 @@ class Settings(BaseSettings):
     MISFIRE_GRACE_TIME_SECONDS: int = 300  # how late a job can still fire
 
 
-@lru_cache
+@lru_cache  # computed once on first call and shared everywhere — env is read once at startup
 def get_settings() -> Settings:
     return Settings()

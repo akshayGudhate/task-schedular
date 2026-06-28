@@ -18,7 +18,7 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
 
         with structlog.contextvars.bound_contextvars(
             request_id=request_id
-        ):  # auto-clears on block exit
+        ):  # contextvars is async-safe; thread-locals would bleed between concurrent coroutines. auto-clears on block exit
             response = await call_next(request)
             duration_ms = round((time.perf_counter() - start) * 1000)
 

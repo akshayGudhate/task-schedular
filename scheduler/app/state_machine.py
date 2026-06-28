@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.models.task import TaskStatus
 
+# terminal states map to empty set — no special casing needed, the guard just fails silently
 ALLOWED_TRANSITIONS: dict[TaskStatus, set[TaskStatus]] = {
     TaskStatus.CREATED: {TaskStatus.PENDING, TaskStatus.RUNNING, TaskStatus.CANCELLED},
     TaskStatus.PENDING: {TaskStatus.RUNNING, TaskStatus.CANCELLED},

@@ -152,7 +152,7 @@ async def cancel_task(task_id: UUID) -> TaskResponse:
 
 
 async def clone_task(task: TaskResponse, next_execution_time: datetime) -> TaskResponse:
-    # parent_task_id threads the chain — GET /tasks?parent_task_id=X shows the full recurrence history
+    # new row per recurrence instead of mutating in place — full history is queryable; parent_task_id threads the chain
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
@@ -215,7 +215,7 @@ async def recover_running_tasks() -> int:
 
 
 async def _transition(task_id: UUID, next_status: TaskStatus) -> None:
-    # compute valid predecessors from the state machine — UPDATE checks them atomically, no separate SELECT needed
+    # derives valid predecessors from ALLOWED_TRANSITIONS so the DB enforcement always mirrors the state machine
     valid_from = [
         s.value for s, allowed in ALLOWED_TRANSITIONS.items() if next_status in allowed
     ]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# two webhook patterns: sync (200 — done by the time we respond) and async (202 — scheduler must poll check_url)
 import asyncio
 import time
 from typing import Any

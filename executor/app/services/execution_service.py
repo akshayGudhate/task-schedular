@@ -53,7 +53,7 @@ async def create_execution(
         )
         if row:
             return row["id"]
-        # duplicate attempt_id from a scheduler retry — return the existing execution id
+        # ON CONFLICT returns no row — the scheduler already retried this attempt, fetch the existing record
         return await conn.fetchval(
             """
             SELECT id

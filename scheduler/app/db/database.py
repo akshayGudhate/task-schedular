@@ -29,7 +29,7 @@ async def create_pool() -> None:
         s.SCHEDULER_DB_URL,
         min_size=s.DB_POOL_MIN_SIZE,
         max_size=s.DB_POOL_MAX_SIZE,
-        command_timeout=60,
+        command_timeout=60,  # asyncpg default is None (no timeout) — this kills runaway queries
     )
     log.info("db.pool.ready", min_size=s.DB_POOL_MIN_SIZE, max_size=s.DB_POOL_MAX_SIZE)
 

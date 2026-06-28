@@ -64,7 +64,7 @@ On first startup, 4 sample tasks are pre-loaded and fire within 2 minutes:
 async def lifespan(app: FastAPI):
     await create_pool()
     await seed()  # inserts 4 sample tasks on first startup; no-op if data already exists
-    await job_runner.start()
+    await job_runner.start()  # seed runs first so tasks are in DB when job_runner reloads them
     log.info("scheduler.starting", version=settings.APP_VERSION)
     yield
     await job_runner.stop()
