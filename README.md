@@ -398,15 +398,8 @@ task-schedular/
 
 | Layer | Technology |
 |---|---|
-| Language | Python 3.11 |
-| Framework | FastAPI 0.128 |
-| Config | pydantic-settings 2.x |
+| Language | Python + FastAPI |
 | Database | PostgreSQL 16 |
-| DB Driver | asyncpg 0.29 |
 | Migrations | Goose (pressly/goose) |
-| Scheduler | APScheduler 3.10 |
-| Cron Parser | croniter 1.4 |
-| HTTP Client | httpx 0.27 |
-| Logging | structlog 24.4 |
-| Security | secure 0.3 |
-| Containers | Docker + docker compose v2 |
+| Scheduler | APScheduler |
+| Containers | Docker + Docker Compose |
