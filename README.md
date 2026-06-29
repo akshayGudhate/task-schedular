@@ -58,7 +58,7 @@ scheduler automatically clones it with the next `execution_time` — the chain c
 ### 1. Clone the repo
 ```bash
 git clone git@github.com:akshayGudhate/task-schedular.git
-cd fortinet
+cd task-schedular
 ```
 
 ### 2. Set up environment
