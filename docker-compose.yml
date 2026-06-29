@@ -19,7 +19,7 @@ services:
       timeout: 5s
       retries: 10
     networks:
-      - fortinet
+      - internal
 
   executor-db:
     image: postgres:16-alpine
@@ -38,7 +38,7 @@ services:
       timeout: 5s
       retries: 10
     networks:
-      - fortinet
+      - internal
 
   # ─── Migrations ─── #
 
@@ -54,7 +54,7 @@ services:
       scheduler-db:
         condition: service_healthy
     networks:
-      - fortinet
+      - internal
     restart: "no"
 
   executor-migrate:
@@ -69,7 +69,7 @@ services:
       executor-db:
         condition: service_healthy
     networks:
-      - fortinet
+      - internal
     restart: "no"
 
   # ─── Services ─── #
@@ -88,7 +88,7 @@ services:
       scheduler-migrate:
         condition: service_completed_successfully
     networks:
-      - fortinet
+      - internal
     restart: unless-stopped
 
   executor:
@@ -105,7 +105,7 @@ services:
       executor-migrate:
         condition: service_completed_successfully
     networks:
-      - fortinet
+      - internal
     restart: unless-stopped
 
 # ─── Volumes & Networks ─── #
@@ -115,5 +115,5 @@ volumes:
   executor_db_data:
 
 networks:
-  fortinet:
+  internal:
     driver: bridge

@@ -1,7 +1,7 @@
 {
 	"info": {
 		"_postman_id": "90986c21-9da9-41a9-ad1a-3ef38a68d1bf",
-		"name": "Fortinet — Task Automation & Scheduling System",
+		"name": "Task Automation & Scheduling System",
 		"description": "**Task Automation & Scheduling System** — two FastAPI microservices.\n\n**Scheduler** (`:8080`) accepts tasks, fires webhooks at scheduled time, handles retries and recurrence.\n**Executor** (`:8090`) receives webhooks, processes them sync or async, exposes a polling endpoint.\n\n### Quick start\n```\nmake docker-up\n```\nOn first startup the scheduler seeds 4 sample tasks that fire automatically within 2 minutes.\n\n### Collection variables\n| Variable | Default | Description |\n|---|---|---|\n| `SCHEDULER_URL` | `http://localhost:8080` | Scheduler service base URL |\n| `EXECUTOR_URL` | `http://localhost:8090` | Executor service base URL |\n| `task_id` | *(auto-set)* | Captured from `POST /tasks` response |\n| `execution_id` | *(auto-set)* | Captured from async 202 webhook response |",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "56216369",

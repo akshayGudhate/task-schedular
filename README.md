@@ -321,7 +321,7 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 ## Project Structure
 
 ```
-fortinet/
+task-schedular/
 ├── docker-compose.yml
 ├── Makefile
 ├── .env.example
